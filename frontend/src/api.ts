@@ -6,6 +6,7 @@ export interface Target {
   host: string;
   tier: number;
   sort_order: number;
+  interval_ms: number; // 0 = global default
   enabled: boolean;
   created_at: number;
 }
@@ -13,7 +14,7 @@ export interface Target {
 export interface TargetStatus extends Target {
   state: "up" | "down" | "unknown";
   last_rtt_us: number;
-  loss_60s_pct: number;
+  loss_pct: number;
   baseline_rtt_us: number;
   outage_since?: number;
 }

@@ -29,6 +29,7 @@ type Target struct {
 	Host      string `json:"host"`
 	Tier      int    `json:"tier"`
 	SortOrder int    `json:"sort_order"`
+	IntervalMs int   `json:"interval_ms"` // 0 = global default
 	Enabled   bool   `json:"enabled"`
 	CreatedAt int64  `json:"created_at"`
 }
@@ -165,7 +166,7 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, host, tier, sort_order, enabled, created_at
+		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms
 		 FROM targets ORDER BY tier, sort_order, id`)
 	if err != nil {
 		return nil, fmt.Errorf("list targets: %w", err)
@@ -174,7 +175,7 @@ func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 	var out []Target
 	for rows.Next() {
 		var t Target
-		if err := rows.Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -185,8 +186,8 @@ func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 func (s *Store) GetTarget(ctx context.Context, id int64) (*Target, error) {
 	var t Target
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, host, tier, sort_order, enabled, created_at FROM targets WHERE id = ?`, id).
-		Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt)
+		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms FROM targets WHERE id = ?`, id).
+		Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -201,8 +202,8 @@ func (s *Store) CreateTarget(ctx context.Context, t Target) (int64, error) {
 		t.CreatedAt = time.Now().UnixMilli()
 	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.CreatedAt)
+		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.CreatedAt, t.IntervalMs)
 	if err != nil {
 		return 0, fmt.Errorf("create target: %w", err)
 	}
@@ -211,8 +212,8 @@ func (s *Store) CreateTarget(ctx context.Context, t Target) (int64, error) {
 
 func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE targets SET name = ?, host = ?, tier = ?, sort_order = ?, enabled = ? WHERE id = ?`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.ID)
+		`UPDATE targets SET name = ?, host = ?, tier = ?, sort_order = ?, enabled = ?, interval_ms = ? WHERE id = ?`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.IntervalMs, t.ID)
 	if err != nil {
 		return fmt.Errorf("update target %d: %w", t.ID, err)
 	}
@@ -374,6 +375,18 @@ func (s *Store) ListSpeedTests(ctx context.Context, from, to int64) ([]SpeedTest
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// LastSpeedTestTime returns the ran_at of the most recent speed test row
+// of any kind (success, failure, or skip marker), or 0 if none exist.
+// Used by the scheduler to survive restarts without resetting its clock.
+func (s *Store) LastSpeedTestTime(ctx context.Context) (int64, error) {
+	var ts sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `SELECT MAX(ran_at) FROM speedtest_results`).Scan(&ts)
+	if err != nil {
+		return 0, fmt.Errorf("last speedtest time: %w", err)
+	}
+	return ts.Int64, nil
 }
 
 // LastSpeedTest returns the most recent successful result, falling back to

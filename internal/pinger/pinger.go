@@ -4,6 +4,7 @@ package pinger
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -33,7 +34,7 @@ type Manager struct {
 
 	mu      sync.Mutex
 	running map[int64]context.CancelFunc // target id -> stop
-	hosts   map[int64]string             // target id -> host (to detect edits)
+	specs   map[int64]string             // target id -> host+interval (to detect edits)
 }
 
 func NewManager(ping PingFunc, interval, timeout time.Duration, onSample func(store.Sample),
@@ -47,12 +48,19 @@ func NewManager(ping PingFunc, interval, timeout time.Duration, onSample func(st
 		sup:             sup,
 		log:             log.With("component", "pinger"),
 		running:         make(map[int64]context.CancelFunc),
-		hosts:           make(map[int64]string),
+		specs:           make(map[int64]string),
 	}
 }
 
+// specKey identifies the loop-relevant fields of a target; a change in
+// either restarts its loop.
+func specKey(t store.Target) string {
+	return fmt.Sprintf("%s|%d", t.Host, t.IntervalMs)
+}
+
 // Reconcile starts loops for enabled targets not yet running, restarts
-// loops whose host changed, and stops loops for removed/disabled targets.
+// loops whose host or interval changed, and stops loops for
+// removed/disabled targets.
 func (m *Manager) Reconcile(ctx context.Context, targets []store.Target) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -66,12 +74,12 @@ func (m *Manager) Reconcile(ctx context.Context, targets []store.Target) {
 
 	for id, cancel := range m.running {
 		t, ok := want[id]
-		if ok && m.hosts[id] == t.Host {
+		if ok && m.specs[id] == specKey(t) {
 			continue
 		}
 		cancel()
 		delete(m.running, id)
-		delete(m.hosts, id)
+		delete(m.specs, id)
 		if !ok {
 			m.log.Info("stopped ping loop", "target_id", id)
 		}
@@ -83,7 +91,7 @@ func (m *Manager) Reconcile(ctx context.Context, targets []store.Target) {
 		}
 		tctx, cancel := context.WithCancel(ctx)
 		m.running[id] = cancel
-		m.hosts[id] = t.Host
+		m.specs[id] = specKey(t)
 		target := t
 		m.sup.Go(tctx, "ping:"+target.Name, func(c context.Context) error {
 			m.loop(c, target)
@@ -102,7 +110,13 @@ func (m *Manager) RunningCount() int {
 
 // loop pings the target on a drift-free schedule: deadlines advance by the
 // interval from a fixed origin regardless of how long each ping takes.
+// A per-target interval override (e.g. a gentle 10s probe for a
+// rate-limited WAN hairpin IP) takes precedence over the global cadence.
 func (m *Manager) loop(ctx context.Context, t store.Target) {
+	interval := m.interval
+	if t.IntervalMs > 0 {
+		interval = time.Duration(t.IntervalMs) * time.Millisecond
+	}
 	next := time.Now()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -134,12 +148,12 @@ func (m *Manager) loop(ctx context.Context, t store.Target) {
 
 		// advance the deadline drift-free; if we fell behind (e.g. long
 		// timeout runs), skip missed slots rather than bursting
-		next = next.Add(m.interval)
+		next = next.Add(interval)
 		if wait := time.Until(next); wait > 0 {
 			timer.Reset(wait)
 		} else {
-			missed := (-wait / m.interval) + 1
-			next = next.Add(missed * m.interval)
+			missed := (-wait / interval) + 1
+			next = next.Add(missed * interval)
 			timer.Reset(time.Until(next))
 		}
 	}

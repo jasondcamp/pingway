@@ -5,6 +5,7 @@ import {
   api,
   Stream,
   type OutageEvent,
+  type Sample,
   type Status,
   type Summary,
   type Target,
@@ -76,7 +77,7 @@ export function mountDashboard(app: HTMLElement): () => void {
         speedBox,
       ),
     ),
-    h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 60s"), lossGrid),
+    h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
     h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
     h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
@@ -117,13 +118,13 @@ export function mountDashboard(app: HTMLElement): () => void {
     clear(lossGrid);
     for (const t of status.targets.filter((x) => x.enabled)) {
       const cls =
-        t.loss_60s_pct < 2 ? "loss-ok" : t.loss_60s_pct <= 10 ? "loss-warn" : "loss-bad";
+        t.loss_pct < 2 ? "loss-ok" : t.loss_pct <= 10 ? "loss-warn" : "loss-bad";
       lossGrid.append(
         h(
           "div",
           { class: "stat" },
           h("div", { class: "label" }, t.name),
-          h("div", { class: `value num ${cls}` }, t.loss_60s_pct.toFixed(1) + "%"),
+          h("div", { class: `value num ${cls}` }, t.loss_pct.toFixed(1) + "%"),
         ),
       );
     }
@@ -413,12 +414,39 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   // --- data flow ---
 
+  // backfill the sparkline from stored samples so it renders full on
+  // load instead of slowly populating from the live stream
+  let sparkSeeded = false;
+  async function seedSparkline(targets: Target[]) {
+    if (sparkSeeded) return;
+    sparkSeeded = true;
+    const to = Date.now();
+    const from = to - 5 * 60_000;
+    const all: Sample[] = [];
+    await Promise.all(
+      targets.map(async (t) => {
+        const s = await api.ping(t.id, from, to, "raw");
+        for (const p of s.points) {
+          all.push({
+            target_id: t.id,
+            ts: p.ts,
+            rtt_us: p.rtt_avg_us ?? 0,
+            success: p.rtt_avg_us != null,
+          });
+        }
+      }),
+    );
+    all.sort((a, b) => a.ts - b.ts);
+    if (all.length) spark.push(all);
+  }
+
   async function refreshStatus() {
     try {
       const next = await api.status();
       status = next;
       const enabled = next.targets.filter((t) => t.enabled);
       spark.setTargets(enabled);
+      seedSparkline(enabled);
       renderSparkToggles(next.targets);
       renderLive();
       renderSpeed();

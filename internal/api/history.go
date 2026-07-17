@@ -61,9 +61,27 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		res = PickResolution(from, to)
 	}
 
+	// cap any response at ~maxChartPoints per series: beyond that the
+	// payload dwarfs the pixels. Raw ranges that would exceed it are
+	// decimated on the fly with a GROUP BY (avg/min/max + loss per bucket).
+	const maxChartPoints = 1800
+
 	var points []pingPoint
 	switch res {
 	case "raw":
+		if estimated := (to - from) / 1000; estimated > maxChartPoints {
+			bucketMs := ((to - from) / maxChartPoints / 1000) * 1000
+			if bucketMs < 1000 {
+				bucketMs = 1000
+			}
+			var derr error
+			points, derr = s.decimatedRaw(r.Context(), targetID, from, to, bucketMs)
+			if derr != nil {
+				writeErr(w, http.StatusInternalServerError, derr.Error())
+				return
+			}
+			break
+		}
 		samples, err := s.store.QuerySamples(r.Context(), targetID, from, to)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
@@ -140,6 +158,51 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, pingResponse{
 		TargetID: targetID, Resolution: res, From: from, To: to, Points: points,
 	})
+}
+
+// decimatedRaw aggregates raw samples into fixed buckets in SQL, keeping
+// the same exclusion rule as the raw path (during-speedtest failures are
+// self-inflicted and don't count as loss).
+func (s *Server) decimatedRaw(ctx context.Context, targetID, from, to, bucketMs int64) ([]pingPoint, error) {
+	rows, err := s.store.DB().QueryContext(ctx,
+		`SELECT (ts / ?) * ?, COUNT(*), SUM(success = 0),
+		        AVG(CASE WHEN success = 1 THEN rtt_us END),
+		        MIN(CASE WHEN success = 1 THEN rtt_us END),
+		        MAX(CASE WHEN success = 1 THEN rtt_us END)
+		 FROM ping_samples
+		 WHERE target_id = ? AND ts >= ? AND ts <= ?
+		   AND NOT (during_speedtest = 1 AND success = 0)
+		 GROUP BY 1 ORDER BY 1`,
+		bucketMs, bucketMs, targetID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	points := []pingPoint{}
+	for rows.Next() {
+		var p pingPoint
+		var avg, mn, mx sql.NullFloat64
+		if err := rows.Scan(&p.TS, &p.Sent, &p.Lost, &avg, &mn, &mx); err != nil {
+			return nil, err
+		}
+		if avg.Valid {
+			v := int64(avg.Float64)
+			p.RTTAvgUs = &v
+		}
+		if mn.Valid {
+			v := int64(mn.Float64)
+			p.RTTMinUs = &v
+		}
+		if mx.Valid {
+			v := int64(mx.Float64)
+			p.RTTMaxUs = &v
+		}
+		if p.Sent > 0 {
+			p.LossPct = 100 * float64(p.Lost) / float64(p.Sent)
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
 }
 
 // --- summary ---

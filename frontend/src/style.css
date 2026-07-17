@@ -427,3 +427,37 @@ body.kiosk {
   flex-wrap: wrap;
 }
 .timepicker-custom input { font-family: var(--font-mono); font-size: 12px; }
+
+/* --- path zones (LAN | ISP network | Internet) --- */
+
+.path-zone {
+  position: relative;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 14px 12px 8px;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.path-zone-label {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-dim);
+  background: var(--bg-panel);
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.path-zone.ok { border-color: color-mix(in srgb, var(--green) 55%, transparent); }
+.path-zone.warn { border-color: var(--yellow); }
+.path-zone.warn .path-zone-label { color: var(--yellow); }
+.path-zone.down { border-color: var(--red); }
+.path-zone.down .path-zone-label { color: var(--red); font-weight: 800; }
+
+.kiosk-root .path-zone { border-radius: 1.2vmin; padding: 2vmin 1.4vmin 1vmin; }
+.kiosk-root .path-zone-label { font-size: 1.4vmin; top: -1vmin; background: var(--bg); }

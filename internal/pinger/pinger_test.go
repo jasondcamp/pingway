@@ -138,6 +138,50 @@ func TestEndToEndOutageDetection(t *testing.T) {
 	}
 }
 
+// TestPerTargetInterval verifies an interval override slows one target
+// without affecting others, and that changing it restarts the loop.
+func TestPerTargetInterval(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sup := supervise.New(testLogger())
+
+	var fastN, slowN atomic.Int64
+	ping := func(ctx context.Context, host string, timeout time.Duration) (time.Duration, error) {
+		if host == "slow" {
+			slowN.Add(1)
+		} else {
+			fastN.Add(1)
+		}
+		return time.Millisecond, nil
+	}
+	m := NewManager(ping, 20*time.Millisecond, time.Second, func(store.Sample) {}, nil, sup, testLogger())
+	m.Reconcile(ctx, []store.Target{
+		{ID: 1, Name: "fast", Host: "fast", Enabled: true},
+		{ID: 2, Name: "slow", Host: "slow", Enabled: true, IntervalMs: 200},
+	})
+	time.Sleep(500 * time.Millisecond)
+	f, sl := fastN.Load(), slowN.Load()
+	if f < 15 {
+		t.Fatalf("fast target pinged %d times, want >=15", f)
+	}
+	if sl > 5 {
+		t.Fatalf("slow target pinged %d times, want <=5 (200ms interval)", sl)
+	}
+
+	// interval change must restart the loop (spec key change)
+	m.Reconcile(ctx, []store.Target{
+		{ID: 1, Name: "fast", Host: "fast", Enabled: true},
+		{ID: 2, Name: "slow", Host: "slow", Enabled: true, IntervalMs: 20},
+	})
+	slowN.Store(0)
+	time.Sleep(300 * time.Millisecond)
+	if slowN.Load() < 8 {
+		t.Fatalf("slow target should speed up after interval change, got %d", slowN.Load())
+	}
+	cancel()
+	sup.Wait()
+}
+
 func TestReconcileStartsAndStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

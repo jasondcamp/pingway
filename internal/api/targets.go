@@ -12,11 +12,12 @@ import (
 )
 
 type targetPayload struct {
-	Name      string `json:"name"`
-	Host      string `json:"host"`
-	Tier      int    `json:"tier"`
-	SortOrder int    `json:"sort_order"`
-	Enabled   *bool  `json:"enabled"`
+	Name       string `json:"name"`
+	Host       string `json:"host"`
+	Tier       int    `json:"tier"`
+	SortOrder  int    `json:"sort_order"`
+	IntervalMs int    `json:"interval_ms"` // 0 = global default
+	Enabled    *bool  `json:"enabled"`
 }
 
 func (p *targetPayload) validate() string {
@@ -36,6 +37,9 @@ func (p *targetPayload) validate() string {
 	}
 	if p.Tier < 1 || p.Tier > 3 {
 		return "tier must be 1, 2, or 3"
+	}
+	if p.IntervalMs != 0 && (p.IntervalMs < 1000 || p.IntervalMs > 60_000) {
+		return "interval_ms must be 0 (default) or between 1000 and 60000"
 	}
 	return ""
 }
@@ -63,11 +67,12 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := store.Target{
-		Name:      p.Name,
-		Host:      p.Host,
-		Tier:      p.Tier,
-		SortOrder: p.SortOrder,
-		Enabled:   p.Enabled == nil || *p.Enabled,
+		Name:       p.Name,
+		Host:       p.Host,
+		Tier:       p.Tier,
+		SortOrder:  p.SortOrder,
+		IntervalMs: p.IntervalMs,
+		Enabled:    p.Enabled == nil || *p.Enabled,
 	}
 	id, err := s.store.CreateTarget(r.Context(), t)
 	if err != nil {
@@ -111,6 +116,7 @@ func (s *Server) handleUpdateTarget(w http.ResponseWriter, r *http.Request) {
 	existing.Host = p.Host
 	existing.Tier = p.Tier
 	existing.SortOrder = p.SortOrder
+	existing.IntervalMs = p.IntervalMs
 	if p.Enabled != nil {
 		existing.Enabled = *p.Enabled
 	}

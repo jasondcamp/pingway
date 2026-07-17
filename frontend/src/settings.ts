@@ -37,6 +37,15 @@ export function mountSettings(app: HTMLElement): () => void {
     ]) {
       tier.append(h("option", { value: v, selected: String(t?.tier ?? 3) === v }, label));
     }
+    const intervalMs = h("input", {
+      type: "number",
+      value: t?.interval_ms ? String(t.interval_ms / 1000) : "",
+      placeholder: "1",
+      min: "1",
+      max: "60",
+      title: "Ping interval in seconds (blank = global default). Use e.g. 10 for hosts that rate-limit ICMP, like a WAN hairpin IP.",
+      style: "width:60px",
+    }) as HTMLInputElement;
     const enabled = h("input", { type: "checkbox", checked: t?.enabled ?? true }) as HTMLInputElement;
 
     const save = async () => {
@@ -46,6 +55,7 @@ export function mountSettings(app: HTMLElement): () => void {
         host: host.value,
         tier: Number(tier.value),
         sort_order: t?.sort_order ?? 0,
+        interval_ms: intervalMs.value ? Math.round(Number(intervalMs.value) * 1000) : 0,
         enabled: enabled.checked,
       };
       try {
@@ -61,6 +71,7 @@ export function mountSettings(app: HTMLElement): () => void {
       h("td", {}, name),
       h("td", {}, host),
       h("td", {}, tier),
+      h("td", {}, intervalMs),
       h("td", { style: "text-align:center" }, enabled),
       h(
         "td",
@@ -107,6 +118,7 @@ export function mountSettings(app: HTMLElement): () => void {
           h("th", {}, "Name"),
           h("th", {}, "Host"),
           h("th", {}, "Tier"),
+          h("th", {}, "Ping every (s)"),
           h("th", {}, "Enabled"),
           h("th", {}, ""),
         ),

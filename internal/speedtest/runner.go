@@ -85,9 +85,11 @@ func (r *Runner) engineFor(name string) (Engine, error) {
 	}
 }
 
-// Run is the scheduler loop; run it under the supervisor.
+// Run is the scheduler loop; run it under the supervisor. The first
+// delay accounts for when the last test actually ran, so container
+// restarts don't push the schedule out indefinitely.
 func (r *Runner) Run(ctx context.Context) error {
-	timer := time.NewTimer(r.nextDelay())
+	timer := time.NewTimer(r.initialDelay(ctx))
 	defer timer.Stop()
 	for {
 		scheduled := false
@@ -129,6 +131,27 @@ func (r *Runner) nextDelay() time.Duration {
 	interval := time.Duration(r.settings.Get().SpeedtestIntervalMinutes) * time.Minute
 	jitter := 0.9 + 0.2*rand.Float64()
 	return time.Duration(float64(interval) * jitter)
+}
+
+// initialDelay schedules the first run at (interval - time since the last
+// recorded test), clamped to [bootGrace, nextDelay()]. A test that is
+// already overdue runs bootGrace after startup — long enough for ping
+// loops to settle so outage-skip logic has real data.
+func (r *Runner) initialDelay(ctx context.Context) time.Duration {
+	const bootGrace = 90 * time.Second
+	interval := time.Duration(r.settings.Get().SpeedtestIntervalMinutes) * time.Minute
+	lastMs, err := r.store.LastSpeedTestTime(ctx)
+	if err != nil || lastMs == 0 {
+		return r.nextDelay()
+	}
+	elapsed := time.Since(time.UnixMilli(lastMs))
+	remaining := interval - elapsed
+	if remaining < bootGrace {
+		r.log.Info("speed test overdue, running shortly",
+			"last_run_ago", elapsed.Round(time.Second), "in", bootGrace)
+		return bootGrace
+	}
+	return remaining
 }
 
 func (r *Runner) runOnce(ctx context.Context, engineName string) {

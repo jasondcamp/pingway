@@ -87,14 +87,14 @@ export function fmtPct(p: number): string {
 export function healthClass(
   t: {
     state: string;
-    loss_60s_pct: number;
+    loss_pct: number;
     last_rtt_us: number;
     baseline_rtt_us: number;
   },
   speedtestRunning = false,
 ): "ok" | "warn" | "down" {
   if (t.state === "down") return "down";
-  if (t.loss_60s_pct >= 2) return "warn";
+  if (t.loss_pct >= 2) return "warn";
   if (
     !speedtestRunning &&
     t.baseline_rtt_us > 0 &&
