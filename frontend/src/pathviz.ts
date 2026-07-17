@@ -26,29 +26,31 @@ function node(t: TargetStatus): HTMLElement {
   );
 }
 
+// Layout: [You] -> tier 1 -> tier 2 -> [Internet] -> tier 3 anchors.
+// The anchors are hosts on the far side of the internet, so they render
+// beyond the cloud; the Internet node itself goes red when ALL anchors
+// are down (that's the definition of an internet outage).
 export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void {
   clear(root);
   const enabled = targets.filter((t) => t.enabled);
-  const tiers: TargetStatus[][] = [1, 2, 3]
+  const local: TargetStatus[][] = [1, 2]
     .map((n) => enabled.filter((t) => t.tier === n))
     .filter((g) => g.length > 0);
+  const anchors = enabled.filter((t) => t.tier === 3);
 
   root.append(h("div", { class: "path-node endpoint" }, "You"));
 
-  let upstreamOfInternet: Health = "ok";
-  for (const group of tiers) {
+  for (const group of local) {
     const gh = worst(group.map(healthClass));
     root.append(h("div", { class: `path-link ${gh}` }));
     const tierBox = h("div", { class: "path-tier" });
     for (const t of group) tierBox.append(node(t));
     root.append(tierBox);
-    upstreamOfInternet = gh;
   }
 
-  // internet endpoint: red if ALL tier-3 targets are down
-  const tier3 = enabled.filter((t) => t.tier === 3);
-  const internetDown = tier3.length > 0 && tier3.every((t) => t.state === "down");
-  const linkCls = internetDown ? "down" : upstreamOfInternet;
+  const anchorHealth: Health = anchors.length ? worst(anchors.map(healthClass)) : "ok";
+  const internetDown = anchors.length > 0 && anchors.every((t) => t.state === "down");
+  const linkCls = internetDown ? "down" : anchorHealth;
   root.append(h("div", { class: `path-link ${linkCls}` }));
   root.append(
     h(
@@ -57,6 +59,13 @@ export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void 
       internetDown ? "OFFLINE" : "Internet",
     ),
   );
+
+  if (anchors.length > 0) {
+    root.append(h("div", { class: `path-link ${linkCls}` }));
+    const tierBox = h("div", { class: "path-tier" });
+    for (const t of anchors) tierBox.append(node(t));
+    root.append(tierBox);
+  }
 }
 
 // localizeFault returns a one-line diagnosis based on tier health, the

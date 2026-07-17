@@ -245,7 +245,14 @@ export function renderSpeedChart(el: HTMLElement, tests: SpeedTest[], height = 2
           value: (_u, v) => (v == null ? "—" : v.toFixed(1) + " Mbps"),
         },
       ],
-      scales: { x: { time: true } },
+      scales: {
+        x: {
+          time: true,
+          // a single test in range degenerates the auto-range; pin an
+          // explicit ±30 min window around it
+          ...(xArr.length === 1 ? { auto: false, range: [xArr[0] - 1800, xArr[0] + 1800] as [number, number] } : {}),
+        },
+      },
       axes: [
         { ...axisStyle(), space: 80 },
         { ...axisStyle(), size: 60, values: (_u, vals) => vals.map((v) => v + "M") },
