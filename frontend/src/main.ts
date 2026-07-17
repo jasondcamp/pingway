@@ -3,6 +3,7 @@ import { h } from "./util";
 import { mountDashboard } from "./dashboard";
 import { mountKiosk } from "./kiosk";
 import { mountSettings } from "./settings";
+import { mountTimePicker } from "./timepicker";
 
 const appRoot = document.getElementById("app")!;
 let teardown: (() => void) | null = null;
@@ -33,12 +34,14 @@ function navigate(path: string, push = true) {
       },
       label,
     );
+  const pickerSlot = h("span", { class: "picker-slot" });
   container.append(
     h(
       "header",
       { class: "topbar" },
       h("h1", {}, "pingway"),
       h("span", { class: "conn-slot" }),
+      pickerSlot,
       h(
         "nav",
         { class: "nav" },
@@ -52,7 +55,16 @@ function navigate(path: string, push = true) {
   container.append(page);
   appRoot.append(container);
 
-  teardown = path.startsWith("/settings") ? mountSettings(page) : mountDashboard(page);
+  if (path.startsWith("/settings")) {
+    teardown = mountSettings(page);
+  } else {
+    const stopPicker = mountTimePicker(pickerSlot);
+    const stopDash = mountDashboard(page);
+    teardown = () => {
+      stopPicker();
+      stopDash();
+    };
+  }
 }
 
 window.addEventListener("popstate", () => navigate(location.pathname, false));

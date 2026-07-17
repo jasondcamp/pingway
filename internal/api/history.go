@@ -185,17 +185,28 @@ var summaryRanges = map[string]time.Duration{
 }
 
 func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
+	// explicit from/to (unix ms) wins; otherwise a named relative range
+	var from, to int64
 	rng := r.URL.Query().Get("range")
-	if rng == "" {
-		rng = "24h"
+	if r.URL.Query().Get("from") != "" || r.URL.Query().Get("to") != "" {
+		from, to = queryRange(r, 24*time.Hour)
+		if to <= from {
+			writeErr(w, http.StatusBadRequest, "to must be after from")
+			return
+		}
+		rng = "custom"
+	} else {
+		if rng == "" {
+			rng = "24h"
+		}
+		span, ok := summaryRanges[rng]
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "range must be one of 1h, 6h, 24h, 7d, 30d (or pass from/to)")
+			return
+		}
+		to = time.Now().UnixMilli()
+		from = to - span.Milliseconds()
 	}
-	span, ok := summaryRanges[rng]
-	if !ok {
-		writeErr(w, http.StatusBadRequest, "range must be one of 1h, 6h, 24h, 7d, 30d")
-		return
-	}
-	to := time.Now().UnixMilli()
-	from := to - span.Milliseconds()
 	ctx := r.Context()
 
 	targets, err := s.store.ListTargets(ctx)

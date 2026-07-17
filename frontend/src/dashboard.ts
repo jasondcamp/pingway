@@ -10,7 +10,9 @@ import {
   type Target,
 } from "./api";
 import { LiveSparkline, colorFor, renderLatencyChart, renderSpeedChart } from "./charts";
+import { mountLossInspector } from "./lossinspector";
 import { localizeFault, renderPathViz } from "./pathviz";
+import { timeRange } from "./timerange";
 import {
   clear,
   fmtAgo,
@@ -22,17 +24,8 @@ import {
   h,
 } from "./util";
 
-const RANGES: Record<string, number> = {
-  "1h": 3_600_000,
-  "6h": 6 * 3_600_000,
-  "24h": 24 * 3_600_000,
-  "7d": 7 * 86_400_000,
-  "30d": 30 * 86_400_000,
-};
-
 export function mountDashboard(app: HTMLElement): () => void {
   let status: Status | null = null;
-  let range = "24h";
   let outageSort: { key: keyof OutageEvent | "duration"; dir: number } = {
     key: "started_at",
     dir: -1,
@@ -49,12 +42,13 @@ export function mountDashboard(app: HTMLElement): () => void {
   const sparkBox = h("div");
   const sparkToggles = h("div", { style: "display:flex;gap:10px;flex-wrap:wrap;margin-top:6px" });
   const lossGrid = h("div", { class: "stat-grid" });
+  const lossInspectorBox = h("div");
   const speedBox = h("div");
   const latencyChartBox = h("div", { class: "chart-wrap" });
   const speedChartBox = h("div", { class: "chart-wrap" });
   const outageBox = h("div");
   const summaryGrid = h("div", { class: "stat-grid" });
-  const rangePicker = h("div", { class: "range-picker" });
+  const historyLabel = h("div", { class: "muted", style: "margin-bottom:10px" });
 
   app.append(
     banner,
@@ -83,7 +77,8 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
     ),
     h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 60s"), lossGrid),
-    h("div", { class: "panel" }, h("h2", {}, "History"), rangePicker, summaryGrid),
+    h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
+    h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Speed tests"), speedChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Outage log"), outageBox),
@@ -222,30 +217,10 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   // --- history section ---
 
-  function renderRangePicker() {
-    clear(rangePicker);
-    for (const r of Object.keys(RANGES)) {
-      rangePicker.append(
-        h(
-          "button",
-          {
-            class: r === range ? "active" : "",
-            onClick: () => {
-              range = r;
-              loadHistory();
-            },
-          },
-          r,
-        ),
-      );
-    }
-  }
-
   async function loadHistory() {
     const epoch = ++historyEpoch;
-    renderRangePicker();
-    const to = Date.now();
-    const from = to - RANGES[range];
+    const { from, to, label } = timeRange.get();
+    historyLabel.textContent = label;
     const targets = (status?.targets ?? (await api.targets())) as Target[];
     const enabled = targets.filter((t) => t.enabled);
 
@@ -255,7 +230,7 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
       api.speedtests(from, to),
       api.outages(from, to),
-      api.summary(range),
+      api.summary(from, to),
     ]);
     if (epoch !== historyEpoch) return; // stale response, a newer load won
 
@@ -463,14 +438,24 @@ export function mountDashboard(app: HTMLElement): () => void {
     onDisconnect: () => connDot.classList.remove("on"),
   });
 
+  const stopInspector = mountLossInspector(lossInspectorBox, () => status?.targets ?? []);
+  const unsubRange = timeRange.subscribe(loadHistory);
+
   refreshStatus().then(loadHistory);
   stream.start();
   const statusTimer = setInterval(refreshStatus, 5000);
   const bannerTimer = setInterval(renderBanner, 1000);
+  // relative ranges slide forward: refresh history periodically
+  const historyTimer = setInterval(() => {
+    if (timeRange.get().isRelative) loadHistory();
+  }, 60_000);
 
   return () => {
     stream.stop();
+    stopInspector();
+    unsubRange();
     clearInterval(statusTimer);
     clearInterval(bannerTimer);
+    clearInterval(historyTimer);
   };
 }

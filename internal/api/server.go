@@ -101,6 +101,7 @@ func NewServer(o Options) *Server {
 	mux.HandleFunc("GET /api/speedtests", s.handleListSpeedtests)
 	mux.HandleFunc("POST /api/speedtest/run", s.handleRunSpeedtest)
 	mux.HandleFunc("GET /api/outages", s.handleOutages)
+	mux.HandleFunc("GET /api/lossbursts", s.handleLossBursts)
 	mux.HandleFunc("GET /api/summary", s.handleSummary)
 	mux.HandleFunc("GET /api/export", s.handleExport)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
