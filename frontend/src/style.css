@@ -125,6 +125,9 @@ header.topbar {
 .pathviz {
   display: flex;
   align-items: stretch;
+  /* safe center: centers when there is room, falls back to start-aligned
+     scrolling when the chain overflows on narrow screens */
+  justify-content: safe center;
   gap: 0;
   overflow-x: auto;
   padding: 8px 0;
