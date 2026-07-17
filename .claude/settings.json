@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "Bash",
+      "Edit",
+      "Write",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Skill",
+      "Agent",
+      "ToolSearch",
+      "Monitor"
+    ],
+    "ask": [
+      "Bash(rm *)",
+      "Bash(* rm -*)",
+      "Bash(rmdir *)",
+      "Bash(git clean *)",
+      "Bash(git reset --hard*)",
+      "Bash(find * -delete*)",
+      "Bash(shred *)",
+      "Bash(unlink *)"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+# pingway configuration — every field is optional; delete anything you
+# don't want to override. Mount at /config/config.yaml (or set CONFIG_FILE).
+#
+# Precedence: UI edits (DB) > env vars > this file > defaults.
+# Set CONFIG_LOCK=true to make env/yaml always win and disable UI edits.
+
+listen: ":8080"
+
+ping:
+  interval_ms: 1000
+  timeout_ms: 2000
+
+speedtest:
+  engine: librespeed        # librespeed | cloudflare | ookla
+  interval_minutes: 45      # +/-10% jitter applied
+  enabled: true
+
+outage:
+  failure_threshold: 5      # consecutive failures -> DOWN
+  recovery_threshold: 3     # consecutive successes -> UP
+
+retention:
+  raw_hours: 48             # raw ping samples
+  rollup_1m_days: 30        # 1-minute rollups (1-hour rollups keep forever)
+
+targets:
+  - name: Firewalla
+    host: 192.168.1.1
+    tier: 1                 # 1 = LAN, 2 = ISP first hop, 3 = internet anchor
+  - name: Deco Hub
+    host: 192.168.1.2
+    tier: 1
+  - name: ISP Gateway
+    host: 96.120.0.1
+    tier: 2
+  - name: Cloudflare
+    host: 1.1.1.1
+    tier: 3
+  - name: Google DNS
+    host: 8.8.8.8
+    tier: 3
