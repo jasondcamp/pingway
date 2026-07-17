@@ -111,8 +111,11 @@ export function mountDashboard(app: HTMLElement): () => void {
   function renderLive() {
     if (!status) return;
     renderBanner();
-    renderPathViz(pathBox, status.targets);
-    const fault = localizeFault(status.targets);
+    renderPathViz(pathBox, status.targets, status.speedtest_running);
+    let fault = localizeFault(status.targets, status.speedtest_running);
+    if (!fault && status.speedtest_running) {
+      fault = "Speed test in progress — latency reflects a deliberately saturated line.";
+    }
     faultLine.textContent = fault ?? "";
     faultLine.style.display = fault ? "block" : "none";
 

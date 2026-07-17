@@ -75,9 +75,15 @@ func (t *Tracker) Stats(targetID int64) Stats {
 	if !ok || len(w.samples) == 0 {
 		return Stats{LastRTTMicros: -1}
 	}
-	var lost int
+	// loss excludes during-speedtest samples: drops under a line we are
+	// deliberately saturating are self-inflicted, not path loss
+	var sent, lost int
 	lastRTT := int64(-1)
 	for _, s := range w.samples {
+		if s.DuringSpeedtest {
+			continue
+		}
+		sent++
 		if !s.Success {
 			lost++
 		}
@@ -88,11 +94,11 @@ func (t *Tracker) Stats(targetID int64) Stats {
 			break
 		}
 	}
-	return Stats{
-		LastRTTMicros: lastRTT,
-		LossPct:       100 * float64(lost) / float64(len(w.samples)),
-		Sent:          len(w.samples),
+	st := Stats{LastRTTMicros: lastRTT, Sent: sent}
+	if sent > 0 {
+		st.LossPct = 100 * float64(lost) / float64(sent)
 	}
+	return st
 }
 
 // Forget drops the window for a deleted target.

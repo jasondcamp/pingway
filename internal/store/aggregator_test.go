@@ -42,10 +42,14 @@ func TestAggregatorRollupAndRetention(t *testing.T) {
 	now := time.Now().UnixMilli()
 	old := now - 100*3_600_000 // 100h ago: past 48h retention
 	var samples []Sample
-	// one old minute-bucket of 60 samples, 10 lost
+	// one old minute-bucket of 60 samples, 10 lost, plus during-speedtest
+	// failures that must NOT be rolled up (self-inflicted loss)
 	base := old - old%60_000
 	for i := int64(0); i < 60; i++ {
 		samples = append(samples, Sample{TargetID: id, TS: base + i*1000, RTTMicros: 1000 + i, Success: i >= 10})
+	}
+	for i := int64(0); i < 5; i++ {
+		samples = append(samples, Sample{TargetID: id, TS: base + i*1000 + 500, Success: false, DuringSpeedtest: true})
 	}
 	// recent samples in the current (incomplete) minute must NOT roll up
 	nowBase := now - now%60_000

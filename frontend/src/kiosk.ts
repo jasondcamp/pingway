@@ -61,7 +61,7 @@ export function mountKiosk(app: HTMLElement): () => void {
       outageBanner.classList.remove("show");
     }
 
-    renderPathViz(pathBox, status.targets);
+    renderPathViz(pathBox, status.targets, status.speedtest_running);
 
     // big numbers: primary tier-3 target latency + loss, last speed test
     const tier3 = status.targets.filter((t) => t.enabled && t.tier === 3);

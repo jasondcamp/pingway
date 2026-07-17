@@ -81,16 +81,25 @@ export function fmtPct(p: number): string {
 }
 
 // Status color class per spec: green <2% loss, yellow 2-10% loss or RTT
-// >3x 24h baseline, red DOWN.
-export function healthClass(t: {
-  state: string;
-  loss_60s_pct: number;
-  last_rtt_us: number;
-  baseline_rtt_us: number;
-}): "ok" | "warn" | "down" {
+// >3x 24h baseline, red DOWN. While a speed test is running, elevated RTT
+// is expected (loaded line), so it doesn't trigger a warning; loss stats
+// already exclude during-speedtest samples server-side.
+export function healthClass(
+  t: {
+    state: string;
+    loss_60s_pct: number;
+    last_rtt_us: number;
+    baseline_rtt_us: number;
+  },
+  speedtestRunning = false,
+): "ok" | "warn" | "down" {
   if (t.state === "down") return "down";
-  if (t.loss_60s_pct >= 2 && t.loss_60s_pct <= 10) return "warn";
-  if (t.loss_60s_pct > 10) return "warn";
-  if (t.baseline_rtt_us > 0 && t.last_rtt_us > 3 * t.baseline_rtt_us) return "warn";
+  if (t.loss_60s_pct >= 2) return "warn";
+  if (
+    !speedtestRunning &&
+    t.baseline_rtt_us > 0 &&
+    t.last_rtt_us > 3 * t.baseline_rtt_us
+  )
+    return "warn";
   return "ok";
 }

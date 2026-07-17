@@ -71,6 +71,11 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		}
 		points = make([]pingPoint, 0, len(samples))
 		for _, sm := range samples {
+			// during-speedtest failures are self-inflicted saturation
+			// drops, not path loss; successes keep their (loaded) RTT
+			if sm.DuringSpeedtest && !sm.Success {
+				continue
+			}
 			p := pingPoint{TS: sm.TS, Sent: 1}
 			if sm.Success {
 				rtt := sm.RTTMicros
@@ -209,16 +214,19 @@ func (s *Server) handleSummary(w http.ResponseWriter, r *http.Request) {
 		var avg, p95 sql.NullFloat64
 		switch res {
 		case "raw":
+			// during_speedtest samples excluded: self-inflicted saturation
+			// must not count against uptime or skew latency stats
 			err = s.store.DB().QueryRowContext(ctx,
 				`SELECT COUNT(*), SUM(success = 0), AVG(CASE WHEN success = 1 THEN rtt_us END)
-				 FROM ping_samples WHERE target_id = ? AND ts >= ? AND ts <= ?`,
+				 FROM ping_samples WHERE target_id = ? AND ts >= ? AND ts <= ? AND during_speedtest = 0`,
 				t.ID, from, to).Scan(&sent, &lost, &avg)
 			if err == nil && sent.Int64 > 0 {
 				// p95 over raw successes
 				var v sql.NullInt64
 				offset := int64(float64(sent.Int64-lost.Int64) * 0.95)
 				qerr := s.store.DB().QueryRowContext(ctx,
-					`SELECT rtt_us FROM ping_samples WHERE target_id = ? AND ts >= ? AND ts <= ? AND success = 1
+					`SELECT rtt_us FROM ping_samples WHERE target_id = ? AND ts >= ? AND ts <= ?
+					   AND success = 1 AND during_speedtest = 0
 					 ORDER BY rtt_us LIMIT 1 OFFSET ?`, t.ID, from, to, offset).Scan(&v)
 				if qerr == nil && v.Valid {
 					p95 = sql.NullFloat64{Float64: float64(v.Int64), Valid: true}

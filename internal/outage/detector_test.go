@@ -107,6 +107,31 @@ func TestMachineUnknownToDownEmitsEvent(t *testing.T) {
 	}
 }
 
+func TestMachineIgnoresDuringSpeedtest(t *testing.T) {
+	m := NewMachine(3, 2, StateUp)
+	// heavy loss during a speed test must not open an outage
+	for ts := int64(1); ts <= 20; ts++ {
+		s := sample(ts, false)
+		s.DuringSpeedtest = true
+		if tr := m.Feed(s); tr != nil {
+			t.Fatalf("speedtest loss caused transition: %+v", tr)
+		}
+	}
+	if m.State() != StateUp {
+		t.Fatalf("state = %v, want up", m.State())
+	}
+	// flagged samples must not reset an in-progress failure count either
+	m.Feed(sample(21, false))
+	m.Feed(sample(22, false))
+	flagged := sample(23, true)
+	flagged.DuringSpeedtest = true
+	m.Feed(flagged)
+	tr := m.Feed(sample(24, false))
+	if tr == nil || tr.Kind != TransitionDown || tr.At != 21 {
+		t.Fatalf("expected DOWN@21 (flagged success must not reset counter), got %+v", tr)
+	}
+}
+
 func TestMachineFullCycle(t *testing.T) {
 	m := NewMachine(2, 2, StateUnknown)
 	m.Feed(sample(1, true)) // settles up

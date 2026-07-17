@@ -13,8 +13,8 @@ function worst(healths: Health[]): Health {
   return "ok";
 }
 
-function node(t: TargetStatus): HTMLElement {
-  const cls = healthClass(t);
+function node(t: TargetStatus, speedtestRunning: boolean): HTMLElement {
+  const cls = healthClass(t, speedtestRunning);
   const rtt = t.state === "down" ? "DOWN" : fmtRTT(t.last_rtt_us);
   const sub = t.state === "down" ? t.host : "ms";
   return h(
@@ -30,7 +30,7 @@ function node(t: TargetStatus): HTMLElement {
 // The anchors are hosts on the far side of the internet, so they render
 // beyond the cloud; the Internet node itself goes red when ALL anchors
 // are down (that's the definition of an internet outage).
-export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void {
+export function renderPathViz(root: HTMLElement, targets: TargetStatus[], speedtestRunning = false): void {
   clear(root);
   const enabled = targets.filter((t) => t.enabled);
   const local: TargetStatus[][] = [1, 2]
@@ -41,14 +41,14 @@ export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void 
   root.append(h("div", { class: "path-node endpoint" }, "You"));
 
   for (const group of local) {
-    const gh = worst(group.map(healthClass));
+    const gh = worst(group.map((t) => healthClass(t, speedtestRunning)));
     root.append(h("div", { class: `path-link ${gh}` }));
     const tierBox = h("div", { class: "path-tier" });
-    for (const t of group) tierBox.append(node(t));
+    for (const t of group) tierBox.append(node(t, speedtestRunning));
     root.append(tierBox);
   }
 
-  const anchorHealth: Health = anchors.length ? worst(anchors.map(healthClass)) : "ok";
+  const anchorHealth: Health = anchors.length ? worst(anchors.map((t) => healthClass(t, speedtestRunning))) : "ok";
   const internetDown = anchors.length > 0 && anchors.every((t) => t.state === "down");
   const linkCls = internetDown ? "down" : anchorHealth;
   root.append(h("div", { class: `path-link ${linkCls}` }));
@@ -63,18 +63,18 @@ export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void 
   if (anchors.length > 0) {
     root.append(h("div", { class: `path-link ${linkCls}` }));
     const tierBox = h("div", { class: "path-tier" });
-    for (const t of anchors) tierBox.append(node(t));
+    for (const t of anchors) tierBox.append(node(t, speedtestRunning));
     root.append(tierBox);
   }
 }
 
 // localizeFault returns a one-line diagnosis based on tier health, the
 // "where is the problem" answer.
-export function localizeFault(targets: TargetStatus[]): string | null {
+export function localizeFault(targets: TargetStatus[], speedtestRunning = false): string | null {
   const enabled = targets.filter((t) => t.enabled);
   const health = (n: number): Health | null => {
     const g = enabled.filter((t) => t.tier === n);
-    return g.length ? worst(g.map(healthClass)) : null;
+    return g.length ? worst(g.map((t) => healthClass(t, speedtestRunning))) : null;
   };
   const t1 = health(1);
   const t2 = health(2);
