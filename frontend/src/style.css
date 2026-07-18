@@ -60,7 +60,7 @@ a { color: var(--blue); text-decoration: none; }
 
 header.topbar {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 16px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
@@ -464,3 +464,9 @@ body.kiosk {
 
 .kiosk-root .path-zone { border-radius: 1.2vmin; padding: 2vmin 1.4vmin 1vmin; }
 .kiosk-root .path-zone-label { font-size: 1.4vmin; top: -1vmin; background: var(--bg); }
+
+.topbar img.logo {
+  height: 24px;
+  width: auto;
+  display: block;
+}

@@ -39,7 +39,7 @@ function navigate(path: string, push = true) {
     h(
       "header",
       { class: "topbar" },
-      h("h1", {}, "pingway"),
+      h("img", { src: "/pingway-logo-white.png", alt: "pingway", class: "logo" }),
       h("span", { class: "conn-slot" }),
       pickerSlot,
       h(
