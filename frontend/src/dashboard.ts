@@ -10,7 +10,7 @@ import {
   type Summary,
   type Target,
 } from "./api";
-import { LiveSparkline, colorFor, renderLatencyChart, renderSpeedChart } from "./charts";
+import { LiveSparkline, colorFor, renderLatencyChart, renderLossChart, renderSpeedChart } from "./charts";
 import { mountLossInspector } from "./lossinspector";
 import { localizeFault, renderPathViz } from "./pathviz";
 import { timeRange } from "./timerange";
@@ -43,6 +43,7 @@ export function mountDashboard(app: HTMLElement): () => void {
   const sparkBox = h("div");
   const sparkToggles = h("div", { style: "display:flex;gap:10px;flex-wrap:wrap;margin-top:6px" });
   const lossGrid = h("div", { class: "stat-grid" });
+  const lossChartBox = h("div", { class: "chart-wrap" });
   const lossInspectorBox = h("div");
   const speedBox = h("div");
   const latencyChartBox = h("div", { class: "chart-wrap" });
@@ -78,6 +79,7 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
     ),
     h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
+    h("div", { class: "panel" }, h("h2", {}, "Packet loss over time"), lossChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
     h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
@@ -236,6 +238,7 @@ export function mountDashboard(app: HTMLElement): () => void {
     if (epoch !== historyEpoch) return; // stale response, a newer load won
 
     renderLatencyChart(latencyChartBox, series);
+    renderLossChart(lossChartBox, series);
     if (tests.filter((t) => !t.error).length > 0) {
       renderSpeedChart(speedChartBox, tests);
     } else {
