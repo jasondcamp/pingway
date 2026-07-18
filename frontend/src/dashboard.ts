@@ -5,12 +5,15 @@ import {
   api,
   Stream,
   type OutageEvent,
+  type Sample,
   type Status,
   type Summary,
   type Target,
 } from "./api";
-import { LiveSparkline, colorFor, renderLatencyChart, renderSpeedChart } from "./charts";
+import { LiveSparkline, colorFor, renderLatencyChart, renderLossChart, renderSpeedChart } from "./charts";
+import { mountLossInspector } from "./lossinspector";
 import { localizeFault, renderPathViz } from "./pathviz";
+import { timeRange } from "./timerange";
 import {
   clear,
   fmtAgo,
@@ -22,17 +25,8 @@ import {
   h,
 } from "./util";
 
-const RANGES: Record<string, number> = {
-  "1h": 3_600_000,
-  "6h": 6 * 3_600_000,
-  "24h": 24 * 3_600_000,
-  "7d": 7 * 86_400_000,
-  "30d": 30 * 86_400_000,
-};
-
 export function mountDashboard(app: HTMLElement): () => void {
   let status: Status | null = null;
-  let range = "24h";
   let outageSort: { key: keyof OutageEvent | "duration"; dir: number } = {
     key: "started_at",
     dir: -1,
@@ -49,12 +43,14 @@ export function mountDashboard(app: HTMLElement): () => void {
   const sparkBox = h("div");
   const sparkToggles = h("div", { style: "display:flex;gap:10px;flex-wrap:wrap;margin-top:6px" });
   const lossGrid = h("div", { class: "stat-grid" });
+  const lossChartBox = h("div", { class: "chart-wrap" });
+  const lossInspectorBox = h("div");
   const speedBox = h("div");
   const latencyChartBox = h("div", { class: "chart-wrap" });
   const speedChartBox = h("div", { class: "chart-wrap" });
   const outageBox = h("div");
   const summaryGrid = h("div", { class: "stat-grid" });
-  const rangePicker = h("div", { class: "range-picker" });
+  const historyLabel = h("div", { class: "muted", style: "margin-bottom:10px" });
 
   app.append(
     banner,
@@ -82,8 +78,10 @@ export function mountDashboard(app: HTMLElement): () => void {
         speedBox,
       ),
     ),
-    h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 60s"), lossGrid),
-    h("div", { class: "panel" }, h("h2", {}, "History"), rangePicker, summaryGrid),
+    h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
+    h("div", { class: "panel" }, h("h2", {}, "Packet loss over time"), lossChartBox),
+    h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
+    h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Speed tests"), speedChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Outage log"), outageBox),
@@ -111,21 +109,24 @@ export function mountDashboard(app: HTMLElement): () => void {
   function renderLive() {
     if (!status) return;
     renderBanner();
-    renderPathViz(pathBox, status.targets);
-    const fault = localizeFault(status.targets);
+    renderPathViz(pathBox, status.targets, status.speedtest_running);
+    let fault = localizeFault(status.targets, status.speedtest_running);
+    if (!fault && status.speedtest_running) {
+      fault = "Speed test in progress — latency reflects a deliberately saturated line.";
+    }
     faultLine.textContent = fault ?? "";
     faultLine.style.display = fault ? "block" : "none";
 
     clear(lossGrid);
     for (const t of status.targets.filter((x) => x.enabled)) {
       const cls =
-        t.loss_60s_pct < 2 ? "loss-ok" : t.loss_60s_pct <= 10 ? "loss-warn" : "loss-bad";
+        t.loss_pct < 2 ? "loss-ok" : t.loss_pct <= 10 ? "loss-warn" : "loss-bad";
       lossGrid.append(
         h(
           "div",
           { class: "stat" },
           h("div", { class: "label" }, t.name),
-          h("div", { class: `value num ${cls}` }, t.loss_60s_pct.toFixed(1) + "%"),
+          h("div", { class: `value num ${cls}` }, t.loss_pct.toFixed(1) + "%"),
         ),
       );
     }
@@ -219,30 +220,10 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   // --- history section ---
 
-  function renderRangePicker() {
-    clear(rangePicker);
-    for (const r of Object.keys(RANGES)) {
-      rangePicker.append(
-        h(
-          "button",
-          {
-            class: r === range ? "active" : "",
-            onClick: () => {
-              range = r;
-              loadHistory();
-            },
-          },
-          r,
-        ),
-      );
-    }
-  }
-
   async function loadHistory() {
     const epoch = ++historyEpoch;
-    renderRangePicker();
-    const to = Date.now();
-    const from = to - RANGES[range];
+    const { from, to, label } = timeRange.get();
+    historyLabel.textContent = label;
     const targets = (status?.targets ?? (await api.targets())) as Target[];
     const enabled = targets.filter((t) => t.enabled);
 
@@ -252,11 +233,12 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
       api.speedtests(from, to),
       api.outages(from, to),
-      api.summary(range),
+      api.summary(from, to),
     ]);
     if (epoch !== historyEpoch) return; // stale response, a newer load won
 
     renderLatencyChart(latencyChartBox, series);
+    renderLossChart(lossChartBox, series);
     if (tests.filter((t) => !t.error).length > 0) {
       renderSpeedChart(speedChartBox, tests);
     } else {
@@ -435,12 +417,39 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   // --- data flow ---
 
+  // backfill the sparkline from stored samples so it renders full on
+  // load instead of slowly populating from the live stream
+  let sparkSeeded = false;
+  async function seedSparkline(targets: Target[]) {
+    if (sparkSeeded) return;
+    sparkSeeded = true;
+    const to = Date.now();
+    const from = to - 5 * 60_000;
+    const all: Sample[] = [];
+    await Promise.all(
+      targets.map(async (t) => {
+        const s = await api.ping(t.id, from, to, "raw");
+        for (const p of s.points) {
+          all.push({
+            target_id: t.id,
+            ts: p.ts,
+            rtt_us: p.rtt_avg_us ?? 0,
+            success: p.rtt_avg_us != null,
+          });
+        }
+      }),
+    );
+    all.sort((a, b) => a.ts - b.ts);
+    if (all.length) spark.push(all);
+  }
+
   async function refreshStatus() {
     try {
       const next = await api.status();
       status = next;
       const enabled = next.targets.filter((t) => t.enabled);
       spark.setTargets(enabled);
+      seedSparkline(enabled);
       renderSparkToggles(next.targets);
       renderLive();
       renderSpeed();
@@ -460,14 +469,24 @@ export function mountDashboard(app: HTMLElement): () => void {
     onDisconnect: () => connDot.classList.remove("on"),
   });
 
+  const stopInspector = mountLossInspector(lossInspectorBox, () => status?.targets ?? []);
+  const unsubRange = timeRange.subscribe(loadHistory);
+
   refreshStatus().then(loadHistory);
   stream.start();
   const statusTimer = setInterval(refreshStatus, 5000);
   const bannerTimer = setInterval(renderBanner, 1000);
+  // relative ranges slide forward: refresh history periodically
+  const historyTimer = setInterval(() => {
+    if (timeRange.get().isRelative) loadHistory();
+  }, 60_000);
 
   return () => {
     stream.stop();
+    stopInspector();
+    unsubRange();
     clearInterval(statusTimer);
     clearInterval(bannerTimer);
+    clearInterval(historyTimer);
   };
 }

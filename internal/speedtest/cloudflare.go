@@ -55,10 +55,7 @@ func (c *Cloudflare) Run(ctx context.Context) (*Result, error) {
 	}
 	res.DownloadBps = down
 
-	up, err := measureThroughput(ctx, parallelStreams, transferDuration, rampUp,
-		func(cc context.Context, counted *atomic.Int64) {
-			pushUpload(cc, c.client, cfUpURL, 20*1024*1024, counted)
-		})
+	up, err := measureUpload(ctx, c.client, cfUpURL, transferDuration, rampUp, parallelStreams)
 	if err != nil {
 		return nil, fmt.Errorf("cloudflare: upload: %w", err)
 	}

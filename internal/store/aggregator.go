@@ -102,6 +102,17 @@ func (a *Aggregator) rollupTarget(ctx context.Context, targetID int64, res strin
 	if err != nil {
 		return err
 	}
+	// exclude during-speedtest samples: their loss (and inflated RTT) is
+	// self-inflicted line saturation, not path health. Loaded-latency data
+	// lives in speedtest_results; the raw flag survives in ping_samples
+	// for the retention window.
+	filtered := samples[:0]
+	for _, s := range samples {
+		if !s.DuringSpeedtest {
+			filtered = append(filtered, s)
+		}
+	}
+	samples = filtered
 	if len(samples) == 0 {
 		// nothing in the window; advance cursor so we don't rescan forever
 		return a.store.SetSetting(ctx, cursorKey, strconv.FormatInt(currentBucket, 10))

@@ -215,6 +215,58 @@ export function renderLatencyChart(
   );
 }
 
+// --- packet loss history chart (loss % per target over time) ---
+
+export function renderLossChart(
+  el: HTMLElement,
+  seriesByTarget: { target: Target; data: PingSeries }[],
+  height = 180,
+): uPlot {
+  el.textContent = "";
+  const xs = new Set<number>();
+  for (const s of seriesByTarget) for (const p of s.data.points) xs.add(Math.floor(p.ts / 1000));
+  const xArr = [...xs].sort((a, b) => a - b);
+  const xIdx = new Map(xArr.map((x, i) => [x, i]));
+
+  const data: uPlot.AlignedData = [xArr];
+  const series: uPlot.Series[] = [{}];
+  seriesByTarget.forEach((s, i) => {
+    const loss: (number | null)[] = new Array(xArr.length).fill(null);
+    for (const p of s.data.points) {
+      const xi = xIdx.get(Math.floor(p.ts / 1000))!;
+      loss[xi] = p.loss_pct;
+    }
+    data.push(loss);
+    series.push({
+      label: s.target.name,
+      stroke: colorFor(i),
+      width: 1.5,
+      spanGaps: true,
+      value: (_u, v) => (v == null ? "—" : v.toFixed(1) + "%"),
+    });
+  });
+
+  return new uPlot(
+    {
+      width: el.clientWidth || 800,
+      height,
+      series,
+      scales: {
+        x: { time: true },
+        // keep 0 pinned and give small loss values room; scale up when
+        // real loss exceeds the floor
+        y: { range: (_u, _min, max) => [0, Math.max(10, Math.ceil(max || 0))] },
+      },
+      axes: [
+        { ...axisStyle(), space: 80 },
+        { ...axisStyle(), size: 46, values: (_u, vals) => vals.map((v) => v + "%") },
+      ],
+    },
+    data,
+    el,
+  );
+}
+
 // --- speed test history chart ---
 
 export function renderSpeedChart(el: HTMLElement, tests: SpeedTest[], height = 220): uPlot {
@@ -245,7 +297,14 @@ export function renderSpeedChart(el: HTMLElement, tests: SpeedTest[], height = 2
           value: (_u, v) => (v == null ? "—" : v.toFixed(1) + " Mbps"),
         },
       ],
-      scales: { x: { time: true } },
+      scales: {
+        x: {
+          time: true,
+          // a single test in range degenerates the auto-range; pin an
+          // explicit ±30 min window around it
+          ...(xArr.length === 1 ? { auto: false, range: [xArr[0] - 1800, xArr[0] + 1800] as [number, number] } : {}),
+        },
+      },
       axes: [
         { ...axisStyle(), space: 80 },
         { ...axisStyle(), size: 60, values: (_u, vals) => vals.map((v) => v + "M") },

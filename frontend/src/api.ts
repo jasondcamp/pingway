@@ -6,6 +6,7 @@ export interface Target {
   host: string;
   tier: number;
   sort_order: number;
+  interval_ms: number; // 0 = global default
   enabled: boolean;
   created_at: number;
 }
@@ -13,7 +14,7 @@ export interface Target {
 export interface TargetStatus extends Target {
   state: "up" | "down" | "unknown";
   last_rtt_us: number;
-  loss_60s_pct: number;
+  loss_pct: number;
   baseline_rtt_us: number;
   outage_since?: number;
 }
@@ -155,7 +156,7 @@ export const api = {
     req<OutageEvent[]>(
       `/api/outages?from=${from}&to=${to}` + (target ? `&target=${target}` : ""),
     ),
-  summary: (range: string) => req<Summary>(`/api/summary?range=${range}`),
+  summary: (from: number, to: number) => req<Summary>(`/api/summary?from=${from}&to=${to}`),
   settings: () => req<AppSettings>("/api/settings"),
   saveSettings: (s: AppSettings) =>
     req<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),

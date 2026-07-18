@@ -1,5 +1,5 @@
 // Package live keeps in-memory rolling windows of recent samples per
-// target, backing /api/status (live RTT, rolling 60s loss) and the 1s SSE
+// target, backing /api/status (live RTT, rolling 5-min loss) and the 1s SSE
 // ping batches.
 package live
 
@@ -9,7 +9,7 @@ import (
 	"pingway.net/pingway/internal/store"
 )
 
-const windowMs = 60_000
+const windowMs = 300_000
 
 type targetWindow struct {
 	samples []store.Sample // ordered by ts, pruned to windowMs
@@ -60,7 +60,7 @@ func (t *Tracker) Drain() []store.Sample {
 	return out
 }
 
-// Stats summarizes a target's rolling 60s window.
+// Stats summarizes a target's rolling 5-minute window.
 type Stats struct {
 	LastRTTMicros int64   `json:"last_rtt_us"`
 	LossPct       float64 `json:"loss_pct"`
@@ -75,9 +75,15 @@ func (t *Tracker) Stats(targetID int64) Stats {
 	if !ok || len(w.samples) == 0 {
 		return Stats{LastRTTMicros: -1}
 	}
-	var lost int
+	// loss excludes during-speedtest samples: drops under a line we are
+	// deliberately saturating are self-inflicted, not path loss
+	var sent, lost int
 	lastRTT := int64(-1)
 	for _, s := range w.samples {
+		if s.DuringSpeedtest {
+			continue
+		}
+		sent++
 		if !s.Success {
 			lost++
 		}
@@ -88,11 +94,11 @@ func (t *Tracker) Stats(targetID int64) Stats {
 			break
 		}
 	}
-	return Stats{
-		LastRTTMicros: lastRTT,
-		LossPct:       100 * float64(lost) / float64(len(w.samples)),
-		Sent:          len(w.samples),
+	st := Stats{LastRTTMicros: lastRTT, Sent: sent}
+	if sent > 0 {
+		st.LossPct = 100 * float64(lost) / float64(sent)
 	}
+	return st
 }
 
 // Forget drops the window for a deleted target.

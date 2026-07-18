@@ -139,20 +139,83 @@ func drainDownload(ctx context.Context, client *http.Client, url string, counted
 	}
 }
 
-func pushUpload(ctx context.Context, client *http.Client, url string, chunkSize int64, counted *atomic.Int64) {
-	for ctx.Err() == nil {
-		body := newCountingReader(ctx, chunkSize, counted)
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
-		if err != nil {
-			return
-		}
-		req.Header.Set("Content-Type", "application/octet-stream")
-		req.ContentLength = chunkSize
-		resp, err := client.Do(req)
-		if err != nil {
-			return
-		}
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
+// measureUpload measures upload throughput by crediting a chunk's bytes
+// only when its HTTP request completes (the server has responded, so the
+// bytes genuinely crossed the wire). Counting bytes as they are written
+// to the socket — the naive approach — measures the local socket/proxy
+// buffer ingestion rate instead, which wildly overreports behind
+// buffering middleboxes (Docker Desktop's VM proxy inflated uploads ~5x).
+//
+// Chunk size adapts upward until a chunk takes >=400ms, keeping the
+// end-of-window truncation error small at any line speed. New chunks stop
+// at the deadline; in-flight chunks get a grace period to finish and the
+// rate divides completed bytes by the actual span they covered.
+func measureUpload(ctx context.Context, client *http.Client, url string,
+	dur, ramp time.Duration, streams int) (float64, error) {
+
+	deadline := time.Now().Add(dur)
+	rampEnd := time.Now().Add(ramp)
+	graceCtx, cancelGrace := context.WithDeadline(ctx, deadline.Add(8*time.Second))
+	defer cancelGrace()
+
+	var mu sync.Mutex
+	var completedBytes int64
+	var lastCompletion time.Time
+
+	var wg sync.WaitGroup
+	for i := 0; i < streams; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			chunk := int64(512 * 1024)
+			var dummy atomic.Int64
+			for time.Now().Before(deadline) && graceCtx.Err() == nil {
+				start := time.Now()
+				body := newCountingReader(graceCtx, chunk, &dummy)
+				req, err := http.NewRequestWithContext(graceCtx, http.MethodPost, url, body)
+				if err != nil {
+					return
+				}
+				req.Header.Set("Content-Type", "application/octet-stream")
+				req.ContentLength = chunk
+				resp, err := client.Do(req)
+				if err != nil {
+					if graceCtx.Err() != nil {
+						return
+					}
+					continue
+				}
+				io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+				resp.Body.Close()
+
+				now := time.Now()
+				if now.After(rampEnd) {
+					mu.Lock()
+					completedBytes += chunk
+					if now.After(lastCompletion) {
+						lastCompletion = now
+					}
+					mu.Unlock()
+				}
+				if now.Sub(start) < 400*time.Millisecond && chunk < 32*1024*1024 {
+					chunk *= 2
+				}
+			}
+		}()
 	}
+	wg.Wait()
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if completedBytes == 0 || lastCompletion.IsZero() {
+		return 0, errors.New("no upload chunks completed in measurement window")
+	}
+	span := lastCompletion.Sub(rampEnd)
+	if span < time.Second {
+		span = time.Second
+	}
+	return float64(completedBytes) * 8 / span.Seconds(), nil
 }

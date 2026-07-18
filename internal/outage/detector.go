@@ -61,7 +61,13 @@ func NewMachine(failThreshold, okThreshold int, initial State) *Machine {
 func (m *Machine) State() State { return m.state }
 
 // Feed processes one sample and returns a transition if one occurred.
+// Samples taken during a speed test are ignored entirely: loss under a
+// saturated line is self-inflicted, not an outage. Detection of a real
+// outage that starts mid-test resumes as soon as the test ends.
 func (m *Machine) Feed(s store.Sample) *Transition {
+	if s.DuringSpeedtest {
+		return nil
+	}
 	if s.Success {
 		m.failCount = 0
 		m.firstFailTS = 0

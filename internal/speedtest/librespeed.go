@@ -83,10 +83,7 @@ func (l *LibreSpeed) Run(ctx context.Context) (*Result, error) {
 	}
 	res.DownloadBps = down
 
-	up, err := measureThroughput(ctx, parallelStreams, transferDuration, rampUp,
-		func(c context.Context, counted *atomic.Int64) {
-			pushUpload(c, l.client, ulURL, 20*1024*1024, counted)
-		})
+	up, err := measureUpload(ctx, l.client, ulURL, transferDuration, rampUp, parallelStreams)
 	if err != nil {
 		return nil, fmt.Errorf("librespeed: upload: %w", err)
 	}

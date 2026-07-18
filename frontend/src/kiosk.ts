@@ -61,7 +61,7 @@ export function mountKiosk(app: HTMLElement): () => void {
       outageBanner.classList.remove("show");
     }
 
-    renderPathViz(pathBox, status.targets);
+    renderPathViz(pathBox, status.targets, status.speedtest_running);
 
     // big numbers: primary tier-3 target latency + loss, last speed test
     const tier3 = status.targets.filter((t) => t.enabled && t.tier === 3);
@@ -77,10 +77,10 @@ export function mountKiosk(app: HTMLElement): () => void {
           down ? "loss-bad" : "loss-ok",
         ),
       );
-      const loss = primary.loss_60s_pct;
+      const loss = primary.loss_pct;
       bigRow.append(
         big(
-          "Loss 60s",
+          "Loss 5m",
           loss.toFixed(1) + "%",
           "",
           loss < 2 ? "loss-ok" : loss <= 10 ? "loss-warn" : "loss-bad",
@@ -94,12 +94,39 @@ export function mountKiosk(app: HTMLElement): () => void {
     }
   }
 
+  // backfill the 1h sparkline from stored samples on load (the API
+  // decimates long raw ranges, so this is one small request per target)
+  let sparkSeeded = false;
+  async function seedSparkline(targets: Status["targets"]) {
+    if (sparkSeeded) return;
+    sparkSeeded = true;
+    const to = Date.now();
+    const from = to - 60 * 60_000;
+    const all: { target_id: number; ts: number; rtt_us: number; success: boolean }[] = [];
+    await Promise.all(
+      targets.map(async (t) => {
+        const s = await api.ping(t.id, from, to, "raw");
+        for (const p of s.points) {
+          all.push({
+            target_id: t.id,
+            ts: p.ts,
+            rtt_us: p.rtt_avg_us ?? 0,
+            success: p.rtt_avg_us != null,
+          });
+        }
+      }),
+    );
+    all.sort((a, b) => a.ts - b.ts);
+    if (all.length) spark.push(all);
+  }
+
   async function refresh() {
     try {
       status = await api.status();
       lastDataAt = Date.now();
       const enabled = status.targets.filter((t) => t.enabled);
       spark.setTargets(enabled);
+      seedSparkline(enabled);
       render();
     } catch {
       /* offline watchdog handles it */

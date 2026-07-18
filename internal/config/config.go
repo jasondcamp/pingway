@@ -67,9 +67,10 @@ type RetentionConfig struct {
 }
 
 type TargetSpec struct {
-	Name string `yaml:"name"`
-	Host string `yaml:"host"`
-	Tier int    `yaml:"tier"`
+	Name       string `yaml:"name"`
+	Host       string `yaml:"host"`
+	Tier       int    `yaml:"tier"`
+	IntervalMs int    `yaml:"interval_ms"` // 0 = global ping interval
 }
 
 // Load builds the effective config: defaults, overlaid by the YAML file at

@@ -29,7 +29,7 @@ docker run -d --name pingway \
   --cap-add NET_RAW \
   -v "$PWD/data:/data" \
   --restart unless-stopped \
-  ghcr.io/OWNER/pingway:latest
+  ghcr.io/jasondcamp/pingway:latest
 ```
 
 Open `http://<host>:8080`. With zero config, pingway auto-detects your
@@ -87,7 +87,10 @@ tiers, thresholds, retention).
 ### Target tiers
 
 - **Tier 1** — LAN infrastructure: router, mesh hub, security appliance.
-- **Tier 2** — ISP first hop / CMTS gateway (find it with `traceroute 1.1.1.1`, first non-private hop).
+- **Tier 2** — ISP first hop / CMTS gateway (find it with `traceroute 1.1.1.1`, first non-private hop). Prefer this over pinging your own
+  public IP: from inside the LAN that ping usually hairpins at your
+  router's WAN interface and never traverses the ISP, so it can look
+  healthy while your line is down.
 - **Tier 3** — internet anchors (1.1.1.1, 8.8.8.8, …). An **internet
   outage** is recorded when *all* tier 3 targets are down simultaneously.
 
@@ -154,7 +157,7 @@ radio, not your line.
 2. Run the copy-paste script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/pingway/main/contrib/pi-kiosk-setup.sh | bash -s -- http://localhost:8080/kiosk
+curl -fsSL https://raw.githubusercontent.com/jasondcamp/pingway/main/contrib/pi-kiosk-setup.sh | bash -s -- http://localhost:8080/kiosk
 ```
 
 It installs Chromium if needed, disables screen blanking, and installs a

@@ -24,13 +24,17 @@ retention:
   rollup_1m_days: 30        # 1-minute rollups (1-hour rollups keep forever)
 
 targets:
-  - name: Firewalla
+  - name: LAN Gateway
     host: 192.168.1.1
-    tier: 1                 # 1 = LAN, 2 = ISP first hop, 3 = internet anchor
-  - name: Deco Hub
-    host: 192.168.1.2
+    tier: 1                 # 1 = LAN, 2 = ISP side, 3 = internet anchor
+  - name: WiFi Hub
+    host: 192.168.1.54
     tier: 1
-  - name: ISP Gateway
+  - name: WAN Gateway       # your public IP: proves the firewall routes LAN->WAN
+    host: 203.0.113.7
+    tier: 2
+    interval_ms: 10000      # probe gently; routers often rate-limit hairpin pings
+  - name: ISP First Hop     # first hop past your modem: traceroute 1.1.1.1
     host: 96.120.0.1
     tier: 2
   - name: Cloudflare

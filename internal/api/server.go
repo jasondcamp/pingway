@@ -101,6 +101,7 @@ func NewServer(o Options) *Server {
 	mux.HandleFunc("GET /api/speedtests", s.handleListSpeedtests)
 	mux.HandleFunc("POST /api/speedtest/run", s.handleRunSpeedtest)
 	mux.HandleFunc("GET /api/outages", s.handleOutages)
+	mux.HandleFunc("GET /api/lossbursts", s.handleLossBursts)
 	mux.HandleFunc("GET /api/summary", s.handleSummary)
 	mux.HandleFunc("GET /api/export", s.handleExport)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
@@ -115,7 +116,9 @@ func NewServer(o Options) *Server {
 	return s
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	withGzip(s.mux).ServeHTTP(w, r)
+}
 
 // --- helpers ---
 
@@ -170,7 +173,7 @@ type targetStatus struct {
 	store.Target
 	State         string  `json:"state"`
 	LastRTTMicros int64   `json:"last_rtt_us"`
-	Loss60sPct    float64 `json:"loss_60s_pct"`
+	LossPct       float64 `json:"loss_pct"` // rolling 5-min window, speedtest samples excluded
 	BaselineRTTUs int64   `json:"baseline_rtt_us"`
 	OutageSince   *int64  `json:"outage_since,omitempty"`
 }
@@ -226,7 +229,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 			Target:        t,
 			State:         st.String(),
 			LastRTTMicros: ls.LastRTTMicros,
-			Loss60sPct:    ls.LossPct,
+			LossPct:       ls.LossPct,
 			BaselineRTTUs: baselines[t.ID],
 		}
 		if since, ok := openByTarget[t.ID]; ok {

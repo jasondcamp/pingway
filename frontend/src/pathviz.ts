@@ -13,59 +13,65 @@ function worst(healths: Health[]): Health {
   return "ok";
 }
 
-function node(t: TargetStatus): HTMLElement {
-  const cls = healthClass(t);
+function node(t: TargetStatus, speedtestRunning: boolean): HTMLElement {
+  const cls = healthClass(t, speedtestRunning);
   const rtt = t.state === "down" ? "DOWN" : fmtRTT(t.last_rtt_us);
   const sub = t.state === "down" ? t.host : "ms";
   return h(
     "div",
-    { class: `path-node ${cls}`, title: `${t.host} — loss ${t.loss_60s_pct.toFixed(1)}% (60s)` },
+    { class: `path-node ${cls}`, title: `${t.host} — loss ${t.loss_pct.toFixed(1)}% (5 min)` },
     h("div", { class: "name" }, t.name),
     h("div", { class: "rtt num" }, rtt),
     h("div", { class: "sub" }, sub),
   );
 }
 
-export function renderPathViz(root: HTMLElement, targets: TargetStatus[]): void {
+// Layout: [You] -> | LAN | -> | ISP NETWORK | -> | INTERNET |.
+// Each tier renders inside a labeled zone whose border carries the zone's
+// health color, making the ownership boundaries (your gear / your ISP's
+// access network / the wider internet) explicit. The Internet zone shows
+// OFFLINE when ALL anchors are down (the definition of an internet
+// outage).
+export function renderPathViz(root: HTMLElement, targets: TargetStatus[], speedtestRunning = false): void {
   clear(root);
   const enabled = targets.filter((t) => t.enabled);
-  const tiers: TargetStatus[][] = [1, 2, 3]
-    .map((n) => enabled.filter((t) => t.tier === n))
-    .filter((g) => g.length > 0);
+  const lan = enabled.filter((t) => t.tier === 1);
+  const isp = enabled.filter((t) => t.tier === 2);
+  const anchors = enabled.filter((t) => t.tier === 3);
+  const internetDown = anchors.length > 0 && anchors.every((t) => t.state === "down");
+
+  const groupHealth = (g: TargetStatus[]): Health =>
+    g.length ? worst(g.map((t) => healthClass(t, speedtestRunning))) : "ok";
+
+  const zone = (label: string, g: TargetStatus[], health: Health, offline = false) => {
+    root.append(h("div", { class: `path-link ${health}` }));
+    const box = h(
+      "div",
+      { class: `path-zone ${health}` },
+      h("div", { class: "path-zone-label" }, offline ? `${label} — OFFLINE` : label),
+    );
+    const tierBox = h("div", { class: "path-tier" });
+    for (const t of g) tierBox.append(node(t, speedtestRunning));
+    box.append(tierBox);
+    root.append(box);
+  };
 
   root.append(h("div", { class: "path-node endpoint" }, "You"));
 
-  let upstreamOfInternet: Health = "ok";
-  for (const group of tiers) {
-    const gh = worst(group.map(healthClass));
-    root.append(h("div", { class: `path-link ${gh}` }));
-    const tierBox = h("div", { class: "path-tier" });
-    for (const t of group) tierBox.append(node(t));
-    root.append(tierBox);
-    upstreamOfInternet = gh;
+  if (lan.length > 0) zone("LAN", lan, groupHealth(lan));
+  if (isp.length > 0) zone("ISP network", isp, internetDown ? "down" : groupHealth(isp));
+  if (anchors.length > 0) {
+    zone("Internet", anchors, internetDown ? "down" : groupHealth(anchors), internetDown);
   }
-
-  // internet endpoint: red if ALL tier-3 targets are down
-  const tier3 = enabled.filter((t) => t.tier === 3);
-  const internetDown = tier3.length > 0 && tier3.every((t) => t.state === "down");
-  const linkCls = internetDown ? "down" : upstreamOfInternet;
-  root.append(h("div", { class: `path-link ${linkCls}` }));
-  root.append(
-    h(
-      "div",
-      { class: `path-node endpoint ${internetDown ? "down" : ""}` },
-      internetDown ? "OFFLINE" : "Internet",
-    ),
-  );
 }
 
 // localizeFault returns a one-line diagnosis based on tier health, the
 // "where is the problem" answer.
-export function localizeFault(targets: TargetStatus[]): string | null {
+export function localizeFault(targets: TargetStatus[], speedtestRunning = false): string | null {
   const enabled = targets.filter((t) => t.enabled);
   const health = (n: number): Health | null => {
     const g = enabled.filter((t) => t.tier === n);
-    return g.length ? worst(g.map(healthClass)) : null;
+    return g.length ? worst(g.map((t) => healthClass(t, speedtestRunning))) : null;
   };
   const t1 = health(1);
   const t2 = health(2);
