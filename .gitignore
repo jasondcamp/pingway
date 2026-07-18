@@ -164,9 +164,6 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
-
 # mypy
 .mypy_cache/
 .dmypy.json
@@ -224,3 +221,5 @@ data/
 frontend/node_modules/
 frontend/dist/*
 !frontend/dist/.gitkeep
+
+.DS_Store

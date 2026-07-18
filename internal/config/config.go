@@ -188,6 +188,11 @@ func applyEnv(cfg *Config) error {
 // ParseTargetsEnv parses "Name:host:tier,Name:host:tier,...".
 // Tier defaults to 3 when omitted.
 func ParseTargetsEnv(s string) ([]TargetSpec, error) {
+	// docker --env-file does no shell parsing, so a quoted value in .env
+	// arrives with literal quotes around it; strip a matched pair.
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
+		s = s[1 : len(s)-1]
+	}
 	var out []TargetSpec
 	for _, part := range strings.Split(s, ",") {
 		part = strings.TrimSpace(part)

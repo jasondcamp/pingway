@@ -111,6 +111,8 @@ func TestParseTargetsEnv(t *testing.T) {
 		wantErr bool
 	}{
 		{"GW:10.0.0.1:1,CF:1.1.1.1:3", 2, false},
+		{`"GW:10.0.0.1:1,CF:1.1.1.1:3"`, 2, false}, // docker --env-file keeps literal quotes
+		{"'GW:10.0.0.1:1'", 1, false},
 		{"NoTier:1.0.0.1", 1, false},              // tier defaults to 3
 		{" Spaced : 8.8.8.8 : 2 ", 1, false},      // whitespace tolerated
 		{"GW:10.0.0.1:1,", 1, false},              // trailing comma ok
