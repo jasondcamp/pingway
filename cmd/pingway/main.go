@@ -91,7 +91,7 @@ func run() error {
 	// --- targets: seed from yaml/env, defaults if nothing anywhere ---
 	if len(cfg.Targets) > 0 {
 		for i, t := range cfg.Targets {
-			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i})
+			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i, IntervalMs: t.IntervalMs})
 			if err != nil {
 				return err
 			}

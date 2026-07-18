@@ -45,6 +45,10 @@ fi
 docker rm -f "$NAME" >/dev/null 2>&1 || true
 
 args=(-d --name "$NAME" --restart unless-stopped -v "$DATA_DIR:/data")
+if [[ -f "$PWD/.env" ]]; then
+  echo "Using env file: $PWD/.env"
+  args+=(--env-file "$PWD/.env")
+fi
 if [[ "$(uname -s)" == "Linux" ]]; then
   # host networking: true latency + LAN reachability
   args+=(--network host --cap-add NET_RAW)

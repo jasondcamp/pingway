@@ -237,10 +237,10 @@ func (s *Store) UpsertTargetByHost(ctx context.Context, t Target) error {
 		t.CreatedAt = time.Now().UnixMilli()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at)
-		 VALUES (?, ?, ?, ?, 1, ?)
-		 ON CONFLICT(host) DO UPDATE SET name = excluded.name, tier = excluded.tier, sort_order = excluded.sort_order`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.CreatedAt)
+		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms)
+		 VALUES (?, ?, ?, ?, 1, ?, ?)
+		 ON CONFLICT(host) DO UPDATE SET name = excluded.name, tier = excluded.tier, sort_order = excluded.sort_order, interval_ms = excluded.interval_ms`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.CreatedAt, t.IntervalMs)
 	if err != nil {
 		return fmt.Errorf("upsert target %s: %w", t.Host, err)
 	}

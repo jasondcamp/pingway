@@ -29,7 +29,7 @@ docker run -d --name pingway \
   --cap-add NET_RAW \
   -v "$PWD/data:/data" \
   --restart unless-stopped \
-  ghcr.io/OWNER/pingway:latest
+  ghcr.io/jasondcamp/pingway:latest
 ```
 
 Open `http://<host>:8080`. With zero config, pingway auto-detects your
@@ -157,7 +157,7 @@ radio, not your line.
 2. Run the copy-paste script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/OWNER/pingway/main/contrib/pi-kiosk-setup.sh | bash -s -- http://localhost:8080/kiosk
+curl -fsSL https://raw.githubusercontent.com/jasondcamp/pingway/main/contrib/pi-kiosk-setup.sh | bash -s -- http://localhost:8080/kiosk
 ```
 
 It installs Chromium if needed, disables screen blanking, and installs a
