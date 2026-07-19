@@ -26,6 +26,7 @@ type App struct {
 	RetentionRawHours        int    `json:"retention_raw_hours"`
 	RetentionRollup1mDays    int    `json:"retention_rollup_1m_days"`
 	ConfigLock               bool   `json:"config_lock"` // read-only via API
+	UIEdited                 bool   `json:"ui_edited,omitempty"`
 }
 
 // Manager serializes access to the persisted settings.
@@ -38,7 +39,9 @@ type Manager struct {
 
 // NewManager seeds settings from boot config. If CONFIG_LOCK is set, the
 // boot config always wins and PUTs are rejected; otherwise a previously
-// persisted UI edit takes precedence over env/yaml.
+// persisted UI edit takes precedence over env/yaml. A persisted copy that
+// was never edited through the UI does NOT win — env/yaml changes apply
+// on the next restart.
 func NewManager(ctx context.Context, s *store.Store, cfg *config.Config) (*Manager, error) {
 	boot := App{
 		SpeedtestEngine:          cfg.Speedtest.Engine,
@@ -56,7 +59,7 @@ func NewManager(ctx context.Context, s *store.Store, cfg *config.Config) (*Manag
 			return nil, err
 		} else if ok {
 			var saved App
-			if err := json.Unmarshal([]byte(raw), &saved); err == nil {
+			if err := json.Unmarshal([]byte(raw), &saved); err == nil && saved.UIEdited {
 				saved.ConfigLock = false
 				m.cur = saved
 			}
@@ -85,6 +88,7 @@ func (m *Manager) Update(ctx context.Context, a App) error {
 	}
 	m.mu.Lock()
 	a.ConfigLock = false
+	a.UIEdited = true
 	m.cur = a
 	m.mu.Unlock()
 	return m.persist(ctx)

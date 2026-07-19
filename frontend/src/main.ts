@@ -35,6 +35,17 @@ function navigate(path: string, push = true) {
       label,
     );
   const pickerSlot = h("span", { class: "picker-slot" });
+  const clock = h("span", { class: "clock" });
+  const tickClock = () => {
+    clock.textContent = new Date().toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      timeZoneName: "short",
+    });
+  };
+  tickClock();
+  const clockTimer = window.setInterval(tickClock, 1000);
   container.append(
     h(
       "header",
@@ -45,6 +56,7 @@ function navigate(path: string, push = true) {
       h(
         "nav",
         { class: "nav" },
+        clock,
         nav("Dashboard", "/"),
         nav("Settings", "/settings"),
         h("a", { href: "/kiosk" }, "Kiosk"),
@@ -65,6 +77,11 @@ function navigate(path: string, push = true) {
       stopDash();
     };
   }
+  const pageTeardown = teardown;
+  teardown = () => {
+    window.clearInterval(clockTimer);
+    pageTeardown?.();
+  };
 }
 
 window.addEventListener("popstate", () => navigate(location.pathname, false));

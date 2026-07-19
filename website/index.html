@@ -270,7 +270,30 @@
                             <span class="font-mono text-[10px] text-white/60 tracking-[0.2em]">LIVE</span>
                         </span>
                     </div>
-                    <div class="relative flex justify-between items-start px-2 md:px-10">
+                    <div class="relative md:hidden">
+                        <div class="absolute left-[11px] top-4 bottom-4 w-[2px] bg-white/10"></div>
+                        <div class="flex items-center gap-4 py-3 relative z-10">
+                            <span class="w-6 h-6 rounded-full bg-[#7ee787] border-[3px] border-[#1c232c] shrink-0"></span>
+                            <span class="font-mono text-white/90 text-sm flex-1 text-left">router</span>
+                            <span class="font-mono font-bold text-sm text-[#7ee787]">0.3 ms</span>
+                        </div>
+                        <div class="flex items-center gap-4 py-3 relative z-10">
+                            <span class="w-6 h-6 rounded-full bg-[#7ee787] border-[3px] border-[#1c232c] shrink-0"></span>
+                            <span class="font-mono text-white/90 text-sm flex-1 text-left">wifi hub</span>
+                            <span class="font-mono font-bold text-sm text-[#7ee787]">0.6 ms</span>
+                        </div>
+                        <div class="flex items-center gap-4 py-3 relative z-10">
+                            <span class="w-6 h-6 rounded-full bg-[#f0b429] border-[3px] border-[#1c232c] shrink-0"></span>
+                            <span class="font-mono text-white/90 text-sm flex-1 text-left">isp</span>
+                            <span class="font-mono font-bold text-sm text-[#f0b429]">11.7 ms</span>
+                        </div>
+                        <div class="flex items-center gap-4 py-3 relative z-10">
+                            <span class="w-6 h-6 rounded-full bg-[#ff6b57] border-[3px] border-[#1c232c] shrink-0"></span>
+                            <span class="font-mono text-white/90 text-sm flex-1 text-left">internet</span>
+                            <span class="font-mono font-bold text-sm text-[#ff6b57]">23.1 ms</span>
+                        </div>
+                    </div>
+                    <div class="relative hidden md:flex justify-between items-start px-2 md:px-10">
                         <div class="absolute top-[11px] left-12 right-12 md:left-24 md:right-24 h-[2px] bg-white/10"></div>
                         <div class="flex flex-col items-center gap-2 relative z-10 flex-1">
                             <span class="w-6 h-6 rounded-full bg-[#7ee787] border-[3px] border-[#1c232c]"></span>
@@ -296,7 +319,7 @@
                 </div>
 
                 <!-- Legend -->
-                <div class="flex flex-col md:flex-row gap-4 md:gap-10 justify-center font-mono text-ping-ink/80 text-base">
+                <div class="flex flex-col md:flex-row gap-4 md:gap-10 justify-center items-center font-mono text-ping-ink/80 text-base">
                     <div class="flex items-center gap-3">
                         <span class="w-3.5 h-3.5 rounded-full bg-[#6aa84f] shrink-0"></span>
                         <p>answering fast</p>
@@ -310,7 +333,7 @@
                         <p>real trouble</p>
                     </div>
                 </div>
-                <p class="font-mono font-bold text-ping-ink text-center text-lg">read it left to right &mdash; the first hop that changes color is where your problem lives.</p>
+                <p class="font-mono font-bold text-ping-ink text-center text-lg">read it <span class="md:hidden">top to bottom</span><span class="hidden md:inline">left to right</span> &mdash; the first hop that changes color is where your problem lives.</p>
             </div>
         </section>
 
@@ -328,7 +351,7 @@
                         <button id="tab-advanced" onclick="qsTab('advanced')" class="font-mono font-bold text-sm px-4 py-2 border-b-[3px] -mb-[3px] transition-colors text-ping-ink/50 border-transparent hover:text-ping-ink">advanced</button>
                     </div>
                     <!-- Simple: the installer -->
-                                        <div id="pane-simple" class="p-6 md:p-8 font-mono text-sm leading-relaxed text-ping-ink relative">
+                                        <div id="pane-simple" class="p-6 pr-16 md:p-8 font-mono text-sm leading-relaxed text-ping-ink relative">
                         <div class="break-all"><span class="text-ping-green">$</span> <span class="text-ping-teal font-bold">curl</span> -fsSL https://raw.githubusercontent.com/jasondcamp/pingway/main/install.sh | bash</div>
                         <br>
                         <div class="text-ping-ink/60"># then visit http://localhost:8080</div>
@@ -338,7 +361,7 @@
                     </div>
 
                     <!-- Advanced: raw docker (Linux) -->
-                                        <div id="pane-advanced" class="hidden p-6 md:p-8 font-mono text-sm leading-relaxed text-ping-ink relative">
+                                        <div id="pane-advanced" class="hidden p-6 pr-16 md:p-8 font-mono text-sm leading-relaxed text-ping-ink relative">
                         <div><span class="text-ping-green">$</span> <span class="text-ping-teal font-bold">docker run</span> -d --name pingway \</div>
                         <div class="pl-4">--network host --cap-add NET_RAW \</div>
                         <div class="pl-4">-v pingway-data:/data \</div>
@@ -383,7 +406,7 @@
         <div class="w-full border-t-[3px] border-dashed border-ping-slate/60 mt-[10px] mb-8"></div>
 
         <!-- Footer -->
-        <footer class="flex flex-col md:flex-row justify-between items-start gap-12 md:gap-4 relative pb-8">
+        <footer class="flex flex-col md:flex-row justify-between items-center md:items-start gap-12 md:gap-4 relative pb-8">
 
             <!-- Left -->
             <div class="flex flex-col gap-2 flex-1 items-center md:items-start text-center md:text-left text-ping-ink font-mono text-sm leading-relaxed">

@@ -74,7 +74,14 @@ header.topbar {
   letter-spacing: 0.02em;
 }
 
-.topbar .nav { margin-left: auto; display: flex; gap: 14px; }
+.topbar .nav { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+.topbar .clock {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+}
 .topbar .nav a { color: var(--fg-dim); }
 .topbar .nav a.active, .topbar .nav a:hover { color: var(--fg); }
 
