@@ -14,6 +14,7 @@ import { LiveSparkline, colorFor, renderLatencyChart, renderLossChart, renderSpe
 import { mountLossInspector } from "./lossinspector";
 import { localizeFault, renderPathViz } from "./pathviz";
 import { timeRange } from "./timerange";
+import { mountTimePicker } from "./timepicker";
 import {
   clear,
   fmtAgo,
@@ -51,6 +52,8 @@ export function mountDashboard(app: HTMLElement): () => void {
   const outageBox = h("div");
   const summaryGrid = h("div", { class: "stat-grid" });
   const historyLabel = h("div", { class: "muted", style: "margin-bottom:10px" });
+  const pickerSlot = h("span", { class: "picker-slot" });
+  const pickerRow = h("div", { class: "picker-row" }, pickerSlot);
 
   app.append(
     banner,
@@ -79,6 +82,7 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
     ),
     h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
+    pickerRow,
     h("div", { class: "panel" }, h("h2", {}, "Packet loss over time"), lossChartBox),
     h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
     h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
@@ -471,6 +475,7 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   const stopInspector = mountLossInspector(lossInspectorBox, () => status?.targets ?? []);
   const unsubRange = timeRange.subscribe(loadHistory);
+  const stopPicker = mountTimePicker(pickerSlot);
 
   refreshStatus().then(loadHistory);
   stream.start();
@@ -484,6 +489,7 @@ export function mountDashboard(app: HTMLElement): () => void {
   return () => {
     stream.stop();
     stopInspector();
+    stopPicker();
     unsubRange();
     clearInterval(statusTimer);
     clearInterval(bannerTimer);

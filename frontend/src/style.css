@@ -78,9 +78,12 @@ header.topbar {
 .topbar .clock {
   font-family: var(--mono, ui-monospace, monospace);
   font-size: 12px;
+  line-height: 1;
   color: var(--fg-dim);
   font-variant-numeric: tabular-nums;
   margin-right: 6px;
+  position: relative;
+  top: 1px;
 }
 .topbar .nav a { color: var(--fg-dim); }
 .topbar .nav a.active, .topbar .nav a:hover { color: var(--fg); }
@@ -477,3 +480,8 @@ body.kiosk {
   width: auto;
   display: block;
 }
+
+/* time-range picker row: separates the realtime panels above from the
+   range-driven history panels below */
+.picker-row { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
+.picker-row::after { content: ""; flex: 1; border-top: 1px solid var(--border); }

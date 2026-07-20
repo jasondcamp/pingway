@@ -3,7 +3,6 @@ import { h } from "./util";
 import { mountDashboard } from "./dashboard";
 import { mountKiosk } from "./kiosk";
 import { mountSettings } from "./settings";
-import { mountTimePicker } from "./timepicker";
 
 const appRoot = document.getElementById("app")!;
 let teardown: (() => void) | null = null;
@@ -34,7 +33,6 @@ function navigate(path: string, push = true) {
       },
       label,
     );
-  const pickerSlot = h("span", { class: "picker-slot" });
   const clock = h("span", { class: "clock" });
   const tickClock = () => {
     clock.textContent = new Date().toLocaleTimeString(undefined, {
@@ -52,7 +50,6 @@ function navigate(path: string, push = true) {
       { class: "topbar" },
       h("img", { src: "/pingway-logo-white.png", alt: "pingway", class: "logo" }),
       h("span", { class: "conn-slot" }),
-      pickerSlot,
       h(
         "nav",
         { class: "nav" },
@@ -70,12 +67,7 @@ function navigate(path: string, push = true) {
   if (path.startsWith("/settings")) {
     teardown = mountSettings(page);
   } else {
-    const stopPicker = mountTimePicker(pickerSlot);
-    const stopDash = mountDashboard(page);
-    teardown = () => {
-      stopPicker();
-      stopDash();
-    };
+    teardown = mountDashboard(page);
   }
   const pageTeardown = teardown;
   teardown = () => {
