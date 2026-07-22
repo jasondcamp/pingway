@@ -170,5 +170,7 @@ func (a *Aggregator) prune(ctx context.Context, now int64) error {
 	if _, err := a.store.db.ExecContext(ctx, `DELETE FROM ping_rollup_1m WHERE ts_bucket < ?`, cutoff1m); err != nil {
 		return fmt.Errorf("prune 1m rollups: %w", err)
 	}
-	return nil
+	// call-probe seconds follow raw retention; freeze events (the
+	// evidence) follow the long rollup retention
+	return a.store.PruneCallprobe(ctx, rawCutoff, cutoff1m)
 }

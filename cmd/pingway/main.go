@@ -16,6 +16,7 @@ import (
 
 	"pingway.net/pingway/frontend"
 	"pingway.net/pingway/internal/api"
+	"pingway.net/pingway/internal/callprobe"
 	"pingway.net/pingway/internal/config"
 	"pingway.net/pingway/internal/live"
 	"pingway.net/pingway/internal/outage"
@@ -191,10 +192,78 @@ func run() error {
 	}
 	speedRunner := speedtest.NewRunner(st, appSettings, hub, &duringSpeedtest, allTier3Down, cfg.DataDir, log)
 
+	// --- synthetic call probe (optional; needs off-network reflectors) ---
+	var probeMgr *callprobe.Manager
+	if hosts := make([]string, 0, len(cfg.Callprobe.Reflectors)); true {
+		for i, r := range cfg.Callprobe.Reflectors {
+			if err := st.UpsertReflectorByHost(ctx, store.Reflector{Name: r.Name, Host: r.Host, SortOrder: i}); err != nil {
+				return err
+			}
+			hosts = append(hosts, r.Host)
+		}
+		if len(cfg.Callprobe.Reflectors) > 0 {
+			if err := st.PruneReflectorsNotIn(ctx, hosts); err != nil {
+				return err
+			}
+		}
+	}
+	reflectors, err := st.ListReflectors(ctx)
+	if err != nil {
+		return err
+	}
+	var probeSpecs []callprobe.Reflector
+	for _, r := range reflectors {
+		if r.Enabled {
+			probeSpecs = append(probeSpecs, callprobe.Reflector{ID: r.ID, Name: r.Name, Host: r.Host})
+		}
+	}
+	if len(probeSpecs) > 0 {
+		onSecond := func(b callprobe.SecondBucket) {
+			err := st.InsertCallprobeBucket(context.Background(), store.CallprobeBucket{
+				ReflectorID: b.ReflectorID, TS: b.TS, Sent: int64(b.Sent), Lost: int64(b.Lost),
+				RTTAvgUs: b.RTTAvgUs, JitterUs: b.JitterUs, MOSx100: int64(b.MOSx100),
+				DuringSpeedtest: b.DuringSpeedtest,
+			})
+			if err != nil {
+				log.Error("callprobe bucket insert", "err", err)
+			}
+		}
+		onFreeze := func(f callprobe.FreezeEvent) {
+			err := st.InsertFreezeEvent(context.Background(), store.FreezeEventRow{
+				ReflectorID: f.ReflectorID, StartedAt: f.StartedAt, DurationMs: f.DurationMs,
+				PacketsLost: int64(f.PacketsLost), DuringSpeedtest: f.DuringSpeedtest,
+			})
+			if err != nil {
+				log.Error("freeze event insert", "err", err)
+			}
+			if !f.DuringSpeedtest {
+				hub.Broadcast(sse.Event{Name: "freeze", Data: f})
+			}
+		}
+		probeMgr = callprobe.NewManager(cfg.Callprobe.PPS, onSecond, onFreeze, &duringSpeedtest, sup, log)
+		probeMgr.Reconcile(ctx, probeSpecs)
+	}
+
 	// --- supervised loops ---
 	sup.Go(ctx, "writer", writer.Run)
 	sup.Go(ctx, "aggregator", aggregator.Run)
 	sup.Go(ctx, "speedtest", speedRunner.Run)
+	if probeMgr != nil {
+		sup.Go(ctx, "sse-callprobe-emitter", func(c context.Context) error {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-c.Done():
+					return nil
+				case <-ticker.C:
+					if hub.ClientCount() > 0 {
+						hub.Broadcast(sse.Event{Name: "callprobe", Data: probeMgr.Snapshots()})
+					}
+				}
+			}
+		})
+	}
 	sup.Go(ctx, "sse-ping-emitter", func(c context.Context) error {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
@@ -222,6 +291,7 @@ func run() error {
 		Hub:              hub,
 		Pinger:           pingMgr,
 		Speedtest:        speedRunner,
+		Callprobe:        callprobeInfo(probeMgr),
 		Settings:         appSettings,
 		OnTargetsChanged: reconcile,
 		PingMode:         string(mode),
@@ -253,6 +323,15 @@ func run() error {
 	sup.Wait()
 	log.Info("pingway stopped")
 	return nil
+}
+
+// callprobeInfo avoids handing the API a typed-nil interface when the
+// probe is disabled.
+func callprobeInfo(m *callprobe.Manager) api.CallprobeInfo {
+	if m == nil {
+		return nil
+	}
+	return m
 }
 
 func newLogger(format string) *slog.Logger {

@@ -253,6 +253,34 @@
                     ~22MB container.<br>SQLite database.<br>No cloud. No bloat.<br>Just your data.
                 </p>
             </div>
+
+            <!-- Featured: synthetic call probe (full width) -->
+            <div class="bg-ping-bg border-[4px] border-ping-slate rounded-[2.5rem] p-6 md:p-8 md:col-span-2 lg:col-span-3 flex flex-col md:flex-row items-center gap-8 group hover:border-ping-offwhite transition-colors duration-300">
+                <div class="flex-1">
+                    <h3 class="font-rubik font-bold text-2xl text-ping-ink mb-3">Synthetic call probe
+                        <span class="ml-2 align-middle rounded-full px-3 py-0.5 bg-ping-green text-white font-mono text-xs font-bold tracking-wide">NEW</span>
+                    </h3>
+                    <p class="font-mono text-ping-ink/70 text-sm leading-relaxed max-w-2xl">
+                        "We deprioritize ICMP" &mdash; not this time. Pingway streams RTP-shaped
+                        UDP to a reflector outside your network, so it measures what a real
+                        video call experiences: freezes counted in milliseconds, jitter, and
+                        a MOS score &mdash; the telecom industry's own quality metric &mdash;
+                        saying your line fails. Evidence your ISP can't argue with.
+                    </p>
+                </div>
+                <div class="bg-[#10151b] rounded-2xl border-[4px] border-ping-offwhite shadow-sticker p-5 font-mono shrink-0 w-64">
+                    <div class="flex items-baseline justify-between">
+                        <span class="text-white/60 text-xs tracking-[0.15em]">MOS</span>
+                        <span class="text-[#ff6b57] font-bold text-3xl">2.1</span>
+                    </div>
+                    <div class="text-[#ff6b57] text-xs mt-1">"unusable for voice"</div>
+                    <div class="border-t border-white/10 mt-3 pt-3 text-white/70 text-xs leading-relaxed">
+                        47 freezes &gt;200ms in 3 hrs<br>
+                        coincident with loss at<br>
+                        the ISP's first hop
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Network View Strip -->

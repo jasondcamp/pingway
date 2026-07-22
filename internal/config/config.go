@@ -33,6 +33,7 @@ type Config struct {
 	Outage    OutageConfig    `yaml:"outage"`
 	Retention RetentionConfig `yaml:"retention"`
 	Targets   []TargetSpec    `yaml:"targets"`
+	Callprobe CallprobeConfig `yaml:"callprobe"`
 	// ConfigLock prevents UI edits from being persisted as source of truth;
 	// YAML/env are re-applied on every boot.
 	ConfigLock bool `yaml:"config_lock"`
@@ -71,6 +72,18 @@ type TargetSpec struct {
 	Host       string `yaml:"host"`
 	Tier       int    `yaml:"tier"`
 	IntervalMs int    `yaml:"interval_ms"` // 0 = global ping interval
+}
+
+// CallprobeConfig configures the synthetic call probe (RTP-shaped UDP
+// stream to off-network reflectors). Empty Reflectors disables it.
+type CallprobeConfig struct {
+	PPS        int             `yaml:"pps"` // packets per second (default 50)
+	Reflectors []ReflectorSpec `yaml:"reflectors"`
+}
+
+type ReflectorSpec struct {
+	Name string `yaml:"name"`
+	Host string `yaml:"host"` // "host:port"; port defaults to 15000
 }
 
 // Load builds the effective config: defaults, overlaid by the YAML file at
@@ -182,7 +195,58 @@ func applyEnv(cfg *Config) error {
 		}
 		cfg.Targets = targets
 	}
+	if v := os.Getenv("CALLPROBE_REFLECTORS"); v != "" {
+		refs, err := ParseReflectorsEnv(v)
+		if err != nil {
+			return err
+		}
+		cfg.Callprobe.Reflectors = refs
+	}
+	if v := os.Getenv("CALLPROBE_PPS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("CALLPROBE_PPS: %w", err)
+		}
+		cfg.Callprobe.PPS = n
+	}
 	return nil
+}
+
+// ParseReflectorsEnv parses "Name:host[:port],Name:host[:port],...".
+// Port defaults to 15000.
+func ParseReflectorsEnv(s string) ([]ReflectorSpec, error) {
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '\'') && s[len(s)-1] == s[0] {
+		s = s[1 : len(s)-1]
+	}
+	var out []ReflectorSpec
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		fields := strings.Split(part, ":")
+		if len(fields) < 2 || len(fields) > 3 {
+			return nil, fmt.Errorf("CALLPROBE_REFLECTORS: bad entry %q (want Name:host[:port])", part)
+		}
+		r := ReflectorSpec{Name: strings.TrimSpace(fields[0]), Host: strings.TrimSpace(fields[1])}
+		if r.Name == "" || r.Host == "" {
+			return nil, fmt.Errorf("CALLPROBE_REFLECTORS: bad entry %q (empty name or host)", part)
+		}
+		port := "15000"
+		if len(fields) == 3 {
+			p := strings.TrimSpace(fields[2])
+			if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+				return nil, fmt.Errorf("CALLPROBE_REFLECTORS: bad port in %q", part)
+			}
+			port = p
+		}
+		r.Host += ":" + port
+		out = append(out, r)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("CALLPROBE_REFLECTORS: no valid entries in %q", s)
+	}
+	return out, nil
 }
 
 // ParseTargetsEnv parses "Name:host:tier,Name:host:tier,...".
@@ -223,6 +287,14 @@ func ParseTargetsEnv(s string) ([]TargetSpec, error) {
 }
 
 func normalize(cfg *Config) {
+	if cfg.Callprobe.PPS < 1 || cfg.Callprobe.PPS > 200 {
+		cfg.Callprobe.PPS = 50
+	}
+	for i, r := range cfg.Callprobe.Reflectors {
+		if !strings.Contains(r.Host, ":") {
+			cfg.Callprobe.Reflectors[i].Host = r.Host + ":15000"
+		}
+	}
 	if cfg.Ping.IntervalMs < 100 {
 		cfg.Ping.IntervalMs = DefaultPingIntervalMs
 	}
