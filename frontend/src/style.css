@@ -483,5 +483,8 @@ body.kiosk {
 
 /* time-range picker row: separates the realtime panels above from the
    range-driven history panels below */
-.picker-row { display: flex; align-items: center; gap: 12px; margin: 22px 0 12px; }
-.picker-row::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.picker-row {
+  border-top: 1px solid var(--border);
+  margin: 32px 0 16px;
+  padding-top: 20px;
+}
