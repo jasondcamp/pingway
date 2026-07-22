@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"pingway.net/pingway/internal/callprobe"
 	"pingway.net/pingway/internal/live"
 	"pingway.net/pingway/internal/outage"
 	"pingway.net/pingway/internal/settings"
@@ -42,6 +43,7 @@ type Server struct {
 	hub       *sse.Hub
 	pinger    PingerInfo
 	speedtest SpeedtestTrigger // may be nil (disabled)
+	callprobe CallprobeInfo    // may be nil (no reflectors)
 	settings  *settings.Manager
 	onTargetsChanged func()
 	pingMode  string
@@ -63,6 +65,7 @@ type Options struct {
 	Hub       *sse.Hub
 	Pinger    PingerInfo
 	Speedtest SpeedtestTrigger
+	Callprobe CallprobeInfo
 	Settings  *settings.Manager
 	// OnTargetsChanged is called after any target CRUD so the pinger
 	// manager can reconcile its goroutines. It must not depend on the
@@ -82,6 +85,7 @@ func NewServer(o Options) *Server {
 		hub:              o.Hub,
 		pinger:           o.Pinger,
 		speedtest:        o.Speedtest,
+		callprobe:        o.Callprobe,
 		settings:         o.Settings,
 		onTargetsChanged: o.OnTargetsChanged,
 		pingMode:         o.PingMode,
@@ -102,6 +106,9 @@ func NewServer(o Options) *Server {
 	mux.HandleFunc("POST /api/speedtest/run", s.handleRunSpeedtest)
 	mux.HandleFunc("GET /api/outages", s.handleOutages)
 	mux.HandleFunc("GET /api/lossbursts", s.handleLossBursts)
+	mux.HandleFunc("GET /api/callprobe/history", s.handleCallprobeHistory)
+	mux.HandleFunc("GET /api/callprobe/freezes", s.handleFreezes)
+	mux.HandleFunc("GET /api/reflectors", s.handleReflectors)
 	mux.HandleFunc("GET /api/summary", s.handleSummary)
 	mux.HandleFunc("GET /api/export", s.handleExport)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
@@ -187,6 +194,7 @@ type statusResponse struct {
 	Targets          []targetStatus    `json:"targets"`
 	LastSpeedtest    *store.SpeedTestRow `json:"last_speedtest"`
 	SpeedtestRunning bool              `json:"speedtest_running"`
+	Callprobe        []callprobe.Snapshot `json:"callprobe,omitempty"`
 }
 
 type internetStatus struct {
@@ -259,6 +267,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.speedtest != nil {
 		resp.SpeedtestRunning = s.speedtest.Running()
+	}
+	if s.callprobe != nil {
+		resp.Callprobe = s.callprobe.Snapshots()
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

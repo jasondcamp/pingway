@@ -1,0 +1,21 @@
+# syntax=docker/dockerfile:1
+# pingway-reflector: tiny stateless UDP echo for the call probe.
+# Runs on a host OUTSIDE the network under test (e.g. a cheap VPS).
+
+# cross-compiles on the build host — no QEMU needed for multi-arch
+FROM --platform=$BUILDPLATFORM golang:1.25 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG VERSION=dev
+ARG TARGETOS TARGETARCH
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
+    -ldflags="-s -w -X main.version=${VERSION}" \
+    -o /pingway-reflector ./cmd/pingway-reflector
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /pingway-reflector /pingway-reflector
+ENV GOMEMLIMIT=32MiB
+EXPOSE 15000/udp
+ENTRYPOINT ["/pingway-reflector"]

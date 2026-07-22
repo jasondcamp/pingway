@@ -43,6 +43,50 @@ export interface Status {
   targets: TargetStatus[];
   last_speedtest: SpeedTest | null;
   speedtest_running: boolean;
+  callprobe?: CallprobeSnapshot[];
+}
+
+export interface CallprobeSnapshot {
+  reflector_id: number;
+  name: string;
+  host: string;
+  mos: number;
+  rtt_ms: number;
+  jitter_ms: number;
+  loss_pct: number;
+  in_freeze: boolean;
+  alive: boolean;
+}
+
+export interface CallprobeBucket {
+  reflector_id: number;
+  ts: number;
+  sent: number;
+  lost: number;
+  rtt_avg_us: number;
+  jitter_us: number;
+  mos_x100: number;
+}
+
+export interface FreezeEvent {
+  id: number;
+  reflector_id: number;
+  started_at: number;
+  duration_ms: number;
+  packets_lost: number;
+}
+
+export interface FreezeResponse {
+  events: FreezeEvent[];
+  count: number;
+  count_visible: number;
+}
+
+export interface Reflector {
+  id: number;
+  name: string;
+  host: string;
+  enabled: boolean;
 }
 
 export interface Sample {
@@ -157,6 +201,11 @@ export const api = {
       `/api/outages?from=${from}&to=${to}` + (target ? `&target=${target}` : ""),
     ),
   summary: (from: number, to: number) => req<Summary>(`/api/summary?from=${from}&to=${to}`),
+  callprobeHistory: (from: number, to: number) =>
+    req<CallprobeBucket[]>(`/api/callprobe/history?from=${from}&to=${to}`),
+  freezes: (from: number, to: number, minMs = 0) =>
+    req<FreezeResponse>(`/api/callprobe/freezes?from=${from}&to=${to}&min_ms=${minMs}`),
+  reflectors: () => req<Reflector[]>("/api/reflectors"),
   settings: () => req<AppSettings>("/api/settings"),
   saveSettings: (s: AppSettings) =>
     req<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
@@ -166,6 +215,7 @@ export type StreamHandlers = {
   onPing?: (samples: Sample[]) => void;
   onStatus?: (ev: Record<string, unknown>) => void;
   onSpeedtest?: (result: SpeedTest) => void;
+  onCallprobe?: (snapshots: CallprobeSnapshot[]) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
 };
@@ -186,6 +236,9 @@ export class Stream {
     );
     this.es.addEventListener("status", (e) =>
       this.handlers.onStatus?.(JSON.parse((e as MessageEvent).data)),
+    );
+    this.es.addEventListener("callprobe", (e) =>
+      this.handlers.onCallprobe?.(JSON.parse((e as MessageEvent).data)),
     );
     this.es.addEventListener("speedtest", (e) =>
       this.handlers.onSpeedtest?.(JSON.parse((e as MessageEvent).data)),

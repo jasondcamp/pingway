@@ -2,7 +2,7 @@
 
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import type { PingSeries, Sample, SpeedTest, Target } from "./api";
+import type { CallprobeBucket, PingSeries, Reflector, Sample, SpeedTest, Target } from "./api";
 
 export const SERIES_COLORS = [
   "#58a6ff",
@@ -311,6 +311,70 @@ export function renderSpeedChart(el: HTMLElement, tests: SpeedTest[], height = 2
       ],
     },
     [xArr, down, up],
+    el,
+  );
+}
+
+// --- call quality (MOS) history chart ---
+
+export function renderMOSChart(
+  el: HTMLElement,
+  buckets: CallprobeBucket[],
+  reflectors: Reflector[],
+  height = 200,
+): uPlot {
+  el.textContent = "";
+  const ids = [...new Set(buckets.map((b) => b.reflector_id))].sort((a, b) => a - b);
+  const names = new Map(reflectors.map((r) => [r.id, r.name]));
+
+  const xsSet = new Set<number>();
+  for (const b of buckets) xsSet.add(Math.floor(b.ts / 1000));
+  const xs = [...xsSet].sort((a, b) => a - b);
+  const xIdx = new Map(xs.map((x, i) => [x, i]));
+
+  const data: uPlot.AlignedData = [xs];
+  const series: uPlot.Series[] = [{}];
+  ids.forEach((id, i) => {
+    const ys: (number | null)[] = new Array(xs.length).fill(null);
+    for (const b of buckets) {
+      if (b.reflector_id === id) ys[xIdx.get(Math.floor(b.ts / 1000))!] = b.mos_x100 / 100;
+    }
+    data.push(ys);
+    series.push({
+      label: names.get(id) ?? `reflector ${id}`,
+      stroke: colorFor(i),
+      width: 2,
+      spanGaps: true,
+      value: (_u, v) => (v == null ? "—" : "MOS " + v.toFixed(2)),
+    });
+  });
+
+  return new uPlot(
+    {
+      width: el.clientWidth || 800,
+      height,
+      series,
+      scales: { x: { time: true }, y: { auto: false, range: [1, 5] } },
+      axes: [
+        { ...axisStyle(), space: 80 },
+        { ...axisStyle(), size: 40 },
+      ],
+      hooks: {
+        drawClear: [
+          (u) => {
+            // shade the "unusable for calls" band (MOS < 3)
+            const ctx = u.ctx;
+            const y3 = u.valToPos(3, "y", true);
+            const bottom = u.valToPos(1, "y", true);
+            ctx.save();
+            ctx.fillStyle = "rgba(248, 81, 73, 0.07)";
+            ctx.fillRect(u.bbox.left, y3, u.bbox.width, bottom - y3);
+            ctx.restore();
+          },
+        ],
+      },
+    },
+    data,
     el,
   );
 }

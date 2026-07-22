@@ -4,16 +4,19 @@
 import {
   api,
   Stream,
+  type CallprobeSnapshot,
   type OutageEvent,
+  type Reflector,
   type Sample,
   type Status,
   type Summary,
   type Target,
 } from "./api";
-import { LiveSparkline, colorFor, renderLatencyChart, renderLossChart, renderSpeedChart } from "./charts";
+import { LiveSparkline, colorFor, renderLatencyChart, renderLossChart, renderMOSChart, renderSpeedChart } from "./charts";
 import { mountLossInspector } from "./lossinspector";
 import { localizeFault, renderPathViz } from "./pathviz";
 import { timeRange } from "./timerange";
+import { mountTimePicker } from "./timepicker";
 import {
   clear,
   fmtAgo,
@@ -51,6 +54,19 @@ export function mountDashboard(app: HTMLElement): () => void {
   const outageBox = h("div");
   const summaryGrid = h("div", { class: "stat-grid" });
   const historyLabel = h("div", { class: "muted", style: "margin-bottom:10px" });
+  const pickerSlot = h("span", { class: "picker-slot" });
+  const pickerRow = h("div", { class: "picker-row" }, pickerSlot);
+  const callGrid = h("div", { class: "stat-grid" });
+  const callPanel = h("div", { class: "panel", style: "display:none" },
+    h("h2", {}, "Call quality — synthetic call probe"), callGrid);
+  const mosChartBox = h("div", { class: "chart-wrap" });
+  const mosPanel = h("div", { class: "panel", style: "display:none" },
+    h("h2", {}, "Call quality over time (MOS)"), mosChartBox);
+  const freezeBox = h("div");
+  const freezePanel = h("div", { class: "panel", style: "display:none" },
+    h("h2", {}, "Call freezes"), freezeBox);
+  let reflectors: Reflector[] = [];
+  let lastSnapshots: CallprobeSnapshot[] = [];
 
   app.append(
     banner,
@@ -79,7 +95,11 @@ export function mountDashboard(app: HTMLElement): () => void {
       ),
     ),
     h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
+    callPanel,
+    pickerRow,
     h("div", { class: "panel" }, h("h2", {}, "Packet loss over time"), lossChartBox),
+    mosPanel,
+    freezePanel,
     h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
     h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
@@ -127,6 +147,35 @@ export function mountDashboard(app: HTMLElement): () => void {
           { class: "stat" },
           h("div", { class: "label" }, t.name),
           h("div", { class: `value num ${cls}` }, t.loss_pct.toFixed(1) + "%"),
+        ),
+      );
+    }
+  }
+
+  function renderCallprobe(snaps: CallprobeSnapshot[]) {
+    lastSnapshots = snaps;
+    if (snaps.length === 0) return;
+    callPanel.style.display = "block";
+    clear(callGrid);
+    for (const sn of snaps) {
+      const cls = !sn.alive || sn.mos < 3 ? "loss-bad" : sn.mos < 4 ? "loss-warn" : "loss-ok";
+      callGrid.append(
+        h(
+          "div",
+          { class: "stat" },
+          h("div", { class: "label" }, `${sn.name} · MOS`),
+          h(
+            "div",
+            { class: `value num ${cls}` },
+            sn.alive ? sn.mos.toFixed(2) : "—",
+            sn.in_freeze ? h("small", { class: "loss-bad" }, "  ● FROZEN") : null,
+            !sn.alive ? h("small", { class: "loss-bad" }, " no replies") : null,
+          ),
+          h(
+            "div",
+            { class: "muted num", style: "font-size:11px;margin-top:2px" },
+            `${sn.rtt_ms.toFixed(1)}ms rtt · ${sn.jitter_ms.toFixed(1)}ms jitter · ${sn.loss_pct.toFixed(1)}% loss`,
+          ),
         ),
       );
     }
@@ -227,15 +276,32 @@ export function mountDashboard(app: HTMLElement): () => void {
     const targets = (status?.targets ?? (await api.targets())) as Target[];
     const enabled = targets.filter((t) => t.enabled);
 
-    const [series, tests, outs, summary] = await Promise.all([
+    const [series, tests, outs, summary, probeBuckets, freezes] = await Promise.all([
       Promise.all(
         enabled.map(async (t) => ({ target: t, data: await api.ping(t.id, from, to) })),
       ),
       api.speedtests(from, to),
       api.outages(from, to),
       api.summary(from, to),
+      api.callprobeHistory(from, to).catch(() => []),
+      api.freezes(from, to).catch(() => null),
     ]);
     if (epoch !== historyEpoch) return; // stale response, a newer load won
+
+    if (probeBuckets.length > 0) {
+      if (reflectors.length === 0) reflectors = await api.reflectors().catch(() => []);
+      mosPanel.style.display = "block";
+      renderMOSChart(mosChartBox, probeBuckets, reflectors);
+    } else {
+      mosPanel.style.display = "none";
+    }
+    if (freezes && (freezes.count > 0 || probeBuckets.length > 0)) {
+      if (reflectors.length === 0) reflectors = await api.reflectors().catch(() => []);
+      freezePanel.style.display = "block";
+      renderFreezes(freezes.events, freezes.count, freezes.count_visible);
+    } else {
+      freezePanel.style.display = "none";
+    }
 
     renderLatencyChart(latencyChartBox, series);
     renderLossChart(lossChartBox, series);
@@ -247,6 +313,50 @@ export function mountDashboard(app: HTMLElement): () => void {
     outages = outs;
     renderOutages(targets);
     renderSummary(summary);
+  }
+
+  function renderFreezes(events: { reflector_id: number; started_at: number; duration_ms: number; packets_lost: number }[], count: number, visible: number) {
+    const names = new Map(reflectors.map((r) => [r.id, r.name]));
+    clear(freezeBox);
+    freezeBox.append(
+      h(
+        "div",
+        { class: "muted", style: "margin-bottom:8px" },
+        `${count} freeze${count === 1 ? "" : "s"} in range · `,
+        h("span", { class: visible > 0 ? "loss-bad" : "loss-ok" }, `${visible} over 200ms (visible stalls)`),
+      ),
+    );
+    if (events.length === 0) {
+      freezeBox.append(h("div", { class: "muted" }, "No freezes recorded. 🎉"));
+      return;
+    }
+    const table = h(
+      "table",
+      {},
+      h(
+        "tr",
+        {},
+        h("th", {}, "When"),
+        h("th", {}, "Reflector"),
+        h("th", { class: "num" }, "Duration"),
+        h("th", { class: "num" }, "Packets lost"),
+        h("th", {}, ""),
+      ),
+    );
+    for (const f of events.slice(0, 100)) {
+      table.append(
+        h(
+          "tr",
+          {},
+          h("td", { class: "num" }, new Date(f.started_at).toLocaleString()),
+          h("td", {}, names.get(f.reflector_id) ?? String(f.reflector_id)),
+          h("td", { class: `num ${f.duration_ms >= 200 ? "loss-bad" : ""}` }, `${f.duration_ms} ms`),
+          h("td", { class: "num" }, String(f.packets_lost)),
+          h("td", {}, f.duration_ms >= 200 ? h("span", { class: "badge open" }, "visible stall") : null),
+        ),
+      );
+    }
+    freezeBox.append(table);
   }
 
   function renderOutages(targets: Target[]) {
@@ -453,6 +563,7 @@ export function mountDashboard(app: HTMLElement): () => void {
       renderSparkToggles(next.targets);
       renderLive();
       renderSpeed();
+      renderCallprobe(next.callprobe ?? lastSnapshots);
     } catch {
       /* transient; SSE reconnect + next poll will recover */
     }
@@ -460,6 +571,7 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   const stream = new Stream({
     onPing: (samples) => spark.push(samples),
+    onCallprobe: (snaps) => renderCallprobe(snaps),
     onStatus: () => refreshStatus(),
     onSpeedtest: () => {
       refreshStatus();
@@ -471,6 +583,7 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   const stopInspector = mountLossInspector(lossInspectorBox, () => status?.targets ?? []);
   const unsubRange = timeRange.subscribe(loadHistory);
+  const stopPicker = mountTimePicker(pickerSlot);
 
   refreshStatus().then(loadHistory);
   stream.start();
@@ -484,6 +597,7 @@ export function mountDashboard(app: HTMLElement): () => void {
   return () => {
     stream.stop();
     stopInspector();
+    stopPicker();
     unsubRange();
     clearInterval(statusTimer);
     clearInterval(bannerTimer);

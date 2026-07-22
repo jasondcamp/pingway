@@ -13,6 +13,10 @@ where is the problem?"* at a glance, with history.
   duration) — not just gaps in a chart.
 - **Scheduled speed tests** (download, upload, idle + loaded latency) with
   pluggable engines: LibreSpeed (default), Cloudflare, Ookla.
+- **Synthetic call probe** — an RTP-shaped UDP stream to an off-network
+  reflector, measuring the thing you actually complain about: call
+  freezes, jitter, and a MOS score in the ISP's own quality units.
+  See [docs/call-probe.md](docs/call-probe.md).
 - **Realtime dashboard** over SSE, uPlot history charts, tiered retention
   (raw 48h → 1-minute 30d → 1-hour forever) in a single SQLite file.
 - **`/kiosk`** route for a dedicated always-on display (Raspberry Pi).
