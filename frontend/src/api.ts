@@ -7,6 +7,7 @@ export interface Target {
   tier: number;
   sort_order: number;
   interval_ms: number; // 0 = global default
+  probe: "icmp" | "dns";
   enabled: boolean;
   created_at: number;
 }

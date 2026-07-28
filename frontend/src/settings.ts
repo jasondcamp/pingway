@@ -37,6 +37,15 @@ export function mountSettings(app: HTMLElement): () => void {
     ]) {
       tier.append(h("option", { value: v, selected: String(t?.tier ?? 3) === v }, label));
     }
+    const probe = h("select", {
+      title: "icmp = echo RTT; dns = a real recursive query to the host's port 53, timed like a ping (timeouts count as loss)",
+    }) as HTMLSelectElement;
+    for (const [v, label] of [
+      ["icmp", "ping (ICMP)"],
+      ["dns", "DNS query"],
+    ]) {
+      probe.append(h("option", { value: v, selected: (t?.probe ?? "icmp") === v }, label));
+    }
     const intervalMs = h("input", {
       type: "number",
       value: t?.interval_ms ? String(t.interval_ms / 1000) : "",
@@ -56,6 +65,7 @@ export function mountSettings(app: HTMLElement): () => void {
         tier: Number(tier.value),
         sort_order: t?.sort_order ?? 0,
         interval_ms: intervalMs.value ? Math.round(Number(intervalMs.value) * 1000) : 0,
+        probe: probe.value as Target["probe"],
         enabled: enabled.checked,
       };
       try {
@@ -70,6 +80,7 @@ export function mountSettings(app: HTMLElement): () => void {
     const cells: HTMLElement[] = [
       h("td", {}, name),
       h("td", {}, host),
+      h("td", {}, probe),
       h("td", {}, tier),
       h("td", {}, intervalMs),
       h("td", { style: "text-align:center" }, enabled),
@@ -117,8 +128,9 @@ export function mountSettings(app: HTMLElement): () => void {
           {},
           h("th", {}, "Name"),
           h("th", {}, "Host"),
+          h("th", {}, "Probe"),
           h("th", {}, "Tier"),
-          h("th", {}, "Ping every (s)"),
+          h("th", {}, "Probe every (s)"),
           h("th", {}, "Enabled"),
           h("th", {}, ""),
         ),

@@ -121,6 +121,9 @@ func TestParseTargetsEnv(t *testing.T) {
 		{"a:b:c:d", 0, true},
 		{"Name:host:9", 0, true},                  // bad tier
 		{":1.1.1.1:1", 0, true},                   // empty name
+		{"CF DNS:1.1.1.1:3:dns", 1, false},        // explicit probe
+		{"CF:1.1.1.1:3:icmp", 1, false},
+		{"CF:1.1.1.1:3:tcp", 0, true},             // unknown probe
 	}
 	for _, c := range cases {
 		got, err := ParseTargetsEnv(c.in)
@@ -134,5 +137,9 @@ func TestParseTargetsEnv(t *testing.T) {
 	got, _ := ParseTargetsEnv("NoTier:1.0.0.1")
 	if got[0].Tier != 3 {
 		t.Fatalf("default tier = %d, want 3", got[0].Tier)
+	}
+	got, _ = ParseTargetsEnv("CF DNS:1.1.1.1:3:dns")
+	if got[0].Probe != "dns" {
+		t.Fatalf("probe = %q, want dns", got[0].Probe)
 	}
 }

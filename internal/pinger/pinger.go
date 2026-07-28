@@ -21,7 +21,7 @@ type PingFunc func(ctx context.Context, host string, timeout time.Duration) (tim
 // Manager owns the per-target ping goroutines and supports reconciling the
 // running set against target CRUD changes without restart.
 type Manager struct {
-	ping     PingFunc
+	probes   map[string]PingFunc // probe kind -> impl; store.ProbeICMP is the fallback
 	interval time.Duration
 	timeout  time.Duration
 	onSample func(store.Sample)
@@ -37,10 +37,10 @@ type Manager struct {
 	specs   map[int64]string             // target id -> host+interval (to detect edits)
 }
 
-func NewManager(ping PingFunc, interval, timeout time.Duration, onSample func(store.Sample),
+func NewManager(probes map[string]PingFunc, interval, timeout time.Duration, onSample func(store.Sample),
 	duringSpeedtest *atomic.Bool, sup *supervise.Supervisor, log *slog.Logger) *Manager {
 	return &Manager{
-		ping:            ping,
+		probes:          probes,
 		interval:        interval,
 		timeout:         timeout,
 		onSample:        onSample,
@@ -53,9 +53,9 @@ func NewManager(ping PingFunc, interval, timeout time.Duration, onSample func(st
 }
 
 // specKey identifies the loop-relevant fields of a target; a change in
-// either restarts its loop.
+// any of them restarts its loop.
 func specKey(t store.Target) string {
-	return fmt.Sprintf("%s|%d", t.Host, t.IntervalMs)
+	return fmt.Sprintf("%s|%s|%d", t.Host, t.Probe, t.IntervalMs)
 }
 
 // Reconcile starts loops for enabled targets not yet running, restarts
@@ -117,6 +117,10 @@ func (m *Manager) loop(ctx context.Context, t store.Target) {
 	if t.IntervalMs > 0 {
 		interval = time.Duration(t.IntervalMs) * time.Millisecond
 	}
+	ping := m.probes[t.Probe]
+	if ping == nil {
+		ping = m.probes[store.ProbeICMP]
+	}
 	next := time.Now()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -129,7 +133,7 @@ func (m *Manager) loop(ctx context.Context, t store.Target) {
 
 		sampleTS := time.Now().UnixMilli()
 		pctx, cancel := context.WithTimeout(ctx, m.timeout)
-		rtt, err := m.ping(pctx, t.Host, m.timeout)
+		rtt, err := ping(pctx, t.Host, m.timeout)
 		cancel()
 
 		if ctx.Err() != nil {

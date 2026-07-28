@@ -79,20 +79,10 @@ export function mountDashboard(app: HTMLElement): () => void {
     ),
     h(
       "div",
-      { class: "row" },
-      h(
-        "div",
-        { class: "panel", style: "flex:2;min-width:380px" },
-        h("h2", {}, "Live latency — last 5 min"),
-        sparkBox,
-        sparkToggles,
-      ),
-      h(
-        "div",
-        { class: "panel", style: "flex:1" },
-        h("h2", {}, "Last speed test"),
-        speedBox,
-      ),
+      { class: "panel" },
+      h("h2", {}, "Live latency — last 5 min"),
+      sparkBox,
+      sparkToggles,
     ),
     h("div", { class: "panel" }, h("h2", {}, "Packet loss — rolling 5 min"), lossGrid),
     callPanel,
@@ -103,7 +93,22 @@ export function mountDashboard(app: HTMLElement): () => void {
     h("div", { class: "panel" }, h("h2", {}, "Loss inspector — raw drops"), lossInspectorBox),
     h("div", { class: "panel" }, h("h2", {}, "History"), historyLabel, summaryGrid),
     h("div", { class: "panel" }, h("h2", {}, "Latency"), latencyChartBox),
-    h("div", { class: "panel" }, h("h2", {}, "Speed tests"), speedChartBox),
+    h(
+      "div",
+      { class: "row" },
+      h(
+        "div",
+        { class: "panel", style: "flex:2;min-width:380px" },
+        h("h2", {}, "Speed tests"),
+        speedChartBox,
+      ),
+      h(
+        "div",
+        { class: "panel", style: "flex:1" },
+        h("h2", {}, "Last speed test"),
+        speedBox,
+      ),
+    ),
     h("div", { class: "panel" }, h("h2", {}, "Outage log"), outageBox),
   );
   document.querySelector(".topbar .conn-slot")?.append(connDot);
