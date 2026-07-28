@@ -43,3 +43,14 @@ targets:
   - name: Google DNS
     host: 8.8.8.8
     tier: 3
+
+# Synthetic call probe (optional): an RTP-shaped UDP stream to reflectors
+# OUTSIDE your network. Measures call freezes, jitter, and MOS — see
+# docs/call-probe.md. Run ghcr.io/jasondcamp/pingway-reflector on a VPS.
+#callprobe:
+#  pps: 50                  # packets/sec per reflector (~9KB/s each way)
+#  reflectors:
+#    - name: DO-NYC
+#      host: 203.0.113.10:15000
+#    - name: DO-AMS         # a second, farther reflector separates
+#      host: 198.51.100.7   # access-link problems from general internet

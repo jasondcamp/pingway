@@ -173,8 +173,12 @@ export function mountDashboard(app: HTMLElement): () => void {
           ),
           h(
             "div",
-            { class: "muted num", style: "font-size:11px;margin-top:2px" },
-            `${sn.rtt_ms.toFixed(1)}ms rtt · ${sn.jitter_ms.toFixed(1)}ms jitter · ${sn.loss_pct.toFixed(1)}% loss`,
+            { class: "muted num", style: "font-size:11px;margin-top:2px;line-height:1.5" },
+            `${sn.rtt_ms.toFixed(1)}ms rtt`,
+            h("br"),
+            `${sn.jitter_ms.toFixed(1)}ms jitter`,
+            h("br"),
+            `${sn.loss_pct.toFixed(1)}% loss`,
           ),
         ),
       );

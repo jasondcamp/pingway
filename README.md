@@ -81,6 +81,8 @@ upserted; after that the DB is the source of truth — unless you set
 | `LOG_FORMAT` | *(auto)* | `json` or `text` |
 | `CONFIG_FILE` | `/config/config.yaml` | YAML config path |
 | `LIBRESPEED_SERVER` | *(auto)* | Pin a LibreSpeed backend base URL |
+| `CALLPROBE_REFLECTORS` | *(unset)* | `Name:host[:port],...` — enables the [synthetic call probe](docs/call-probe.md) |
+| `CALLPROBE_PPS` | `50` | Call-probe packets/sec per reflector (~9KB/s each way) |
 
 ### YAML
 
@@ -116,6 +118,20 @@ Failed runs are stored with their error string — they're data, not noise.
 Scheduled runs are skipped (and marked `skipped_outage`) while an
 internet-level outage is active.
 
+## Synthetic call probe
+
+ICMP proves loss exists; an RTP-shaped UDP stream to an off-network
+reflector proves *calls* fail — freezes counted in milliseconds, jitter,
+and a MOS score in the telecom industry's own quality units. Run
+`ghcr.io/jasondcamp/pingway-reflector` on a cheap VPS, then:
+
+```sh
+CALLPROBE_REFLECTORS=DO-NYC:your.droplet.ip
+```
+
+Full guide (reflector deployment, k8s manifest, security model):
+[docs/call-probe.md](docs/call-probe.md).
+
 ## HTTP API
 
 ```
@@ -125,8 +141,11 @@ GET  /api/ping?target=&from=&to=&resolution=raw|1m|1h   (auto-selects by range)
 GET  /api/speedtests?from=&to=
 POST /api/speedtest/run     manual trigger (409 while one is running)
 GET  /api/outages?from=&to=&target=
+GET  /api/callprobe/history?from=&to=      per-second MOS/loss/jitter buckets
+GET  /api/callprobe/freezes?from=&to=&min_ms=   freeze events + totals
+GET  /api/reflectors        configured call-probe reflectors
 GET  /api/summary?range=1h|6h|24h|7d|30d
-GET  /api/stream            SSE: ping (1s batches), status, speedtest
+GET  /api/stream            SSE: ping (1s batches), status, speedtest, callprobe, freeze
 GET  /api/export?format=csv&table=ping_samples|ping_rollup_1m|ping_rollup_1h|speedtest_results|outage_events|targets
 GET  /healthz               liveness (pinger goroutines + DB writable)
 ```

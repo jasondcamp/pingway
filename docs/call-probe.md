@@ -43,7 +43,8 @@ The reflector is a stateless UDP echo, safe to run publicly:
 - **Rate limits** — per source IP (default 120pps, `-per-ip-pps`) and
   global (default 20000pps, `-max-pps`).
 
-Docker:
+Docker (or use [`reflector.sh`](../reflector.sh), which adds pull +
+restart + cap flags):
 
 ```sh
 docker run -d --name pingway-reflector --restart unless-stopped \

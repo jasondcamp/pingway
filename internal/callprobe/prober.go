@@ -208,7 +208,7 @@ func (p *Prober) handshake(conn *net.UDPConn) error {
 	hello := make([]byte, PacketSize)
 	MarshalHello(hello)
 	reply := make([]byte, 64)
-	var lastErr error = fmt.Errorf("no token reply")
+	lastErr := fmt.Errorf("no token reply")
 	for attempt := 0; attempt < 5; attempt++ {
 		if _, err := conn.Write(hello); err != nil {
 			lastErr = err
