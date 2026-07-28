@@ -40,9 +40,17 @@ targets:
   - name: Cloudflare
     host: 1.1.1.1
     tier: 3
+  - name: Google
+    host: 8.8.8.8
+    tier: 3
+  - name: Cloudflare DNS       # probe: dns sends a real recursive query
+    host: 1.1.1.1              # (A example.com, UDP :53) and times the
+    tier: 3                    # answer; timeouts count as loss, so a
+    probe: dns                 # resolver outage shows even when pings pass
   - name: Google DNS
     host: 8.8.8.8
     tier: 3
+    probe: dns
 
 # Synthetic call probe (optional): an RTP-shaped UDP stream to reflectors
 # OUTSIDE your network. Measures call freezes, jitter, and MOS — see

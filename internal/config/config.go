@@ -72,6 +72,7 @@ type TargetSpec struct {
 	Host       string `yaml:"host"`
 	Tier       int    `yaml:"tier"`
 	IntervalMs int    `yaml:"interval_ms"` // 0 = global ping interval
+	Probe      string `yaml:"probe"`       // "icmp" (default) or "dns"
 }
 
 // CallprobeConfig configures the synthetic call probe (RTP-shaped UDP
@@ -249,8 +250,8 @@ func ParseReflectorsEnv(s string) ([]ReflectorSpec, error) {
 	return out, nil
 }
 
-// ParseTargetsEnv parses "Name:host:tier,Name:host:tier,...".
-// Tier defaults to 3 when omitted.
+// ParseTargetsEnv parses "Name:host[:tier[:probe]],...".
+// Tier defaults to 3, probe to icmp, when omitted.
 func ParseTargetsEnv(s string) ([]TargetSpec, error) {
 	// docker --env-file does no shell parsing, so a quoted value in .env
 	// arrives with literal quotes around it; strip a matched pair.
@@ -264,19 +265,26 @@ func ParseTargetsEnv(s string) ([]TargetSpec, error) {
 			continue
 		}
 		fields := strings.Split(part, ":")
-		if len(fields) < 2 || len(fields) > 3 {
-			return nil, fmt.Errorf("TARGETS: bad entry %q (want Name:host[:tier])", part)
+		if len(fields) < 2 || len(fields) > 4 {
+			return nil, fmt.Errorf("TARGETS: bad entry %q (want Name:host[:tier[:probe]])", part)
 		}
 		t := TargetSpec{Name: strings.TrimSpace(fields[0]), Host: strings.TrimSpace(fields[1]), Tier: 3}
 		if t.Name == "" || t.Host == "" {
 			return nil, fmt.Errorf("TARGETS: bad entry %q (empty name or host)", part)
 		}
-		if len(fields) == 3 {
+		if len(fields) >= 3 {
 			tier, err := strconv.Atoi(strings.TrimSpace(fields[2]))
 			if err != nil || tier < 1 || tier > 3 {
 				return nil, fmt.Errorf("TARGETS: bad tier in %q (want 1-3)", part)
 			}
 			t.Tier = tier
+		}
+		if len(fields) == 4 {
+			probe := strings.TrimSpace(fields[3])
+			if probe != "icmp" && probe != "dns" {
+				return nil, fmt.Errorf("TARGETS: bad probe in %q (want icmp or dns)", part)
+			}
+			t.Probe = probe
 		}
 		out = append(out, t)
 	}
@@ -320,11 +328,16 @@ func normalize(cfg *Config) {
 		if cfg.Targets[i].Tier < 1 || cfg.Targets[i].Tier > 3 {
 			cfg.Targets[i].Tier = 3
 		}
+		if cfg.Targets[i].Probe != "dns" {
+			cfg.Targets[i].Probe = "icmp"
+		}
 	}
 }
 
 // DefaultTargets returns the zero-config target set: the default gateway
-// (if detectable) as tier 1, plus two public anchors as tier 3.
+// (if detectable) as tier 1, plus two public anchors as tier 3, each
+// probed both by ICMP echo and by a real DNS query — the two fail
+// independently (e.g. a resolver outage with the path still up).
 func DefaultTargets() []TargetSpec {
 	var out []TargetSpec
 	if gw, err := DefaultGateway(); err == nil && gw != "" {
@@ -332,7 +345,9 @@ func DefaultTargets() []TargetSpec {
 	}
 	out = append(out,
 		TargetSpec{Name: "Cloudflare", Host: "1.1.1.1", Tier: 3},
-		TargetSpec{Name: "Google DNS", Host: "8.8.8.8", Tier: 3},
+		TargetSpec{Name: "Google", Host: "8.8.8.8", Tier: 3},
+		TargetSpec{Name: "Cloudflare DNS", Host: "1.1.1.1", Tier: 3, Probe: "dns"},
+		TargetSpec{Name: "Google DNS", Host: "8.8.8.8", Tier: 3, Probe: "dns"},
 	)
 	return out
 }

@@ -23,6 +23,12 @@ type Store struct {
 	db *sql.DB
 }
 
+// Probe kinds for Target.Probe.
+const (
+	ProbeICMP = "icmp" // ICMP echo RTT
+	ProbeDNS  = "dns"  // recursive DNS query RTT over UDP :53
+)
+
 type Target struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
@@ -30,6 +36,7 @@ type Target struct {
 	Tier      int    `json:"tier"`
 	SortOrder int    `json:"sort_order"`
 	IntervalMs int   `json:"interval_ms"` // 0 = global default
+	Probe     string `json:"probe"`       // ProbeICMP (default) or ProbeDNS
 	Enabled   bool   `json:"enabled"`
 	CreatedAt int64  `json:"created_at"`
 }
@@ -166,7 +173,7 @@ func (s *Store) DB() *sql.DB { return s.db }
 
 func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms
+		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms, probe
 		 FROM targets ORDER BY tier, sort_order, id`)
 	if err != nil {
 		return nil, fmt.Errorf("list targets: %w", err)
@@ -175,7 +182,7 @@ func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 	var out []Target
 	for rows.Next() {
 		var t Target
-		if err := rows.Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs, &t.Probe); err != nil {
 			return nil, err
 		}
 		out = append(out, t)
@@ -186,8 +193,8 @@ func (s *Store) ListTargets(ctx context.Context) ([]Target, error) {
 func (s *Store) GetTarget(ctx context.Context, id int64) (*Target, error) {
 	var t Target
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms FROM targets WHERE id = ?`, id).
-		Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs)
+		`SELECT id, name, host, tier, sort_order, enabled, created_at, interval_ms, probe FROM targets WHERE id = ?`, id).
+		Scan(&t.ID, &t.Name, &t.Host, &t.Tier, &t.SortOrder, &t.Enabled, &t.CreatedAt, &t.IntervalMs, &t.Probe)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -201,9 +208,12 @@ func (s *Store) CreateTarget(ctx context.Context, t Target) (int64, error) {
 	if t.CreatedAt == 0 {
 		t.CreatedAt = time.Now().UnixMilli()
 	}
+	if t.Probe == "" {
+		t.Probe = ProbeICMP
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.CreatedAt, t.IntervalMs)
+		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms, probe) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.CreatedAt, t.IntervalMs, t.Probe)
 	if err != nil {
 		return 0, fmt.Errorf("create target: %w", err)
 	}
@@ -211,9 +221,12 @@ func (s *Store) CreateTarget(ctx context.Context, t Target) (int64, error) {
 }
 
 func (s *Store) UpdateTarget(ctx context.Context, t Target) error {
+	if t.Probe == "" {
+		t.Probe = ProbeICMP
+	}
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE targets SET name = ?, host = ?, tier = ?, sort_order = ?, enabled = ?, interval_ms = ? WHERE id = ?`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.IntervalMs, t.ID)
+		`UPDATE targets SET name = ?, host = ?, tier = ?, sort_order = ?, enabled = ?, interval_ms = ?, probe = ? WHERE id = ?`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.Enabled, t.IntervalMs, t.Probe, t.ID)
 	if err != nil {
 		return fmt.Errorf("update target %d: %w", t.ID, err)
 	}
@@ -230,17 +243,20 @@ func (s *Store) DeleteTarget(ctx context.Context, id int64) error {
 	return nil
 }
 
-// UpsertTargetByHost inserts the target if its host is new, otherwise
-// updates name/tier (used to apply YAML/env config at boot).
+// UpsertTargetByHost inserts the target if its (host, probe) pair is new,
+// otherwise updates name/tier (used to apply YAML/env config at boot).
 func (s *Store) UpsertTargetByHost(ctx context.Context, t Target) error {
 	if t.CreatedAt == 0 {
 		t.CreatedAt = time.Now().UnixMilli()
 	}
+	if t.Probe == "" {
+		t.Probe = ProbeICMP
+	}
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms)
-		 VALUES (?, ?, ?, ?, 1, ?, ?)
-		 ON CONFLICT(host) DO UPDATE SET name = excluded.name, tier = excluded.tier, sort_order = excluded.sort_order, interval_ms = excluded.interval_ms`,
-		t.Name, t.Host, t.Tier, t.SortOrder, t.CreatedAt, t.IntervalMs)
+		`INSERT INTO targets (name, host, tier, sort_order, enabled, created_at, interval_ms, probe)
+		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(host, probe) DO UPDATE SET name = excluded.name, tier = excluded.tier, sort_order = excluded.sort_order, interval_ms = excluded.interval_ms`,
+		t.Name, t.Host, t.Tier, t.SortOrder, t.CreatedAt, t.IntervalMs, t.Probe)
 	if err != nil {
 		return fmt.Errorf("upsert target %s: %w", t.Host, err)
 	}

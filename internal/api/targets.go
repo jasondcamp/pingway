@@ -17,6 +17,7 @@ type targetPayload struct {
 	Tier       int    `json:"tier"`
 	SortOrder  int    `json:"sort_order"`
 	IntervalMs int    `json:"interval_ms"` // 0 = global default
+	Probe      string `json:"probe"`       // "" = icmp
 	Enabled    *bool  `json:"enabled"`
 }
 
@@ -40,6 +41,12 @@ func (p *targetPayload) validate() string {
 	}
 	if p.IntervalMs != 0 && (p.IntervalMs < 1000 || p.IntervalMs > 60_000) {
 		return "interval_ms must be 0 (default) or between 1000 and 60000"
+	}
+	if p.Probe == "" {
+		p.Probe = store.ProbeICMP
+	}
+	if p.Probe != store.ProbeICMP && p.Probe != store.ProbeDNS {
+		return "probe must be icmp or dns"
 	}
 	return ""
 }
@@ -72,12 +79,13 @@ func (s *Server) handleCreateTarget(w http.ResponseWriter, r *http.Request) {
 		Tier:       p.Tier,
 		SortOrder:  p.SortOrder,
 		IntervalMs: p.IntervalMs,
+		Probe:      p.Probe,
 		Enabled:    p.Enabled == nil || *p.Enabled,
 	}
 	id, err := s.store.CreateTarget(r.Context(), t)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			writeErr(w, http.StatusConflict, "a target with that host already exists")
+			writeErr(w, http.StatusConflict, "a target with that host and probe already exists")
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -117,12 +125,13 @@ func (s *Server) handleUpdateTarget(w http.ResponseWriter, r *http.Request) {
 	existing.Tier = p.Tier
 	existing.SortOrder = p.SortOrder
 	existing.IntervalMs = p.IntervalMs
+	existing.Probe = p.Probe
 	if p.Enabled != nil {
 		existing.Enabled = *p.Enabled
 	}
 	if err := s.store.UpdateTarget(r.Context(), *existing); err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
-			writeErr(w, http.StatusConflict, "a target with that host already exists")
+			writeErr(w, http.StatusConflict, "a target with that host and probe already exists")
 			return
 		}
 		writeErr(w, http.StatusInternalServerError, err.Error())

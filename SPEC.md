@@ -117,7 +117,9 @@ SPEEDTEST_INTERVAL_MINUTES=45
 SPEEDTEST_ENGINE=librespeed
 ```
 
-Default targets if nothing configured: auto-detect default gateway (parse `/proc/net/route`, works in-container) as tier 1, plus 1.1.1.1 and 8.8.8.8 (tier 3). The app must start and be useful with zero config.
+Default targets if nothing configured: auto-detect default gateway (parse `/proc/net/route`, works in-container) as tier 1, plus 1.1.1.1 and 8.8.8.8 (tier 3), each both pinged and DNS-probed. The app must start and be useful with zero config.
+
+Each target has a probe kind: `icmp` (default; echo RTT) or `dns` — a real recursive A query for a well-known name over UDP :53, timing until the answer arrives. DNS probes share the ping pipeline: the query RTT is a sample, a timeout or non-NOERROR rcode is a lost sample, so loss stats and outage detection apply unchanged. Uniqueness is (host, probe), so the same resolver can be monitored both ways; the env form is `Name:host[:tier[:probe]]`.
 
 Targets are editable in the UI (add/remove/rename/reorder/enable-disable) and persist to the `targets` table. YAML/env are read once at startup and upserted; DB is source of truth thereafter unless `CONFIG_LOCK=true`. Target changes at runtime start/stop pinger goroutines without restart.
 

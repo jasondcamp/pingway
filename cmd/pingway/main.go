@@ -92,7 +92,7 @@ func run() error {
 	// --- targets: seed from yaml/env, defaults if nothing anywhere ---
 	if len(cfg.Targets) > 0 {
 		for i, t := range cfg.Targets {
-			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i, IntervalMs: t.IntervalMs})
+			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i, IntervalMs: t.IntervalMs, Probe: t.Probe})
 			if err != nil {
 				return err
 			}
@@ -101,11 +101,11 @@ func run() error {
 		return err
 	} else if n == 0 {
 		for i, t := range config.DefaultTargets() {
-			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i})
+			err := st.UpsertTargetByHost(ctx, store.Target{Name: t.Name, Host: t.Host, Tier: t.Tier, SortOrder: i, Probe: t.Probe})
 			if err != nil {
 				return err
 			}
-			log.Info("added default target", "name", t.Name, "host", t.Host, "tier", t.Tier)
+			log.Info("added default target", "name", t.Name, "host", t.Host, "tier", t.Tier, "probe", t.Probe)
 		}
 	}
 
@@ -153,7 +153,10 @@ func run() error {
 
 	mode := pinger.DetectMode(log)
 	pingMgr := pinger.NewManager(
-		pinger.NewProbingPingFunc(mode),
+		map[string]pinger.PingFunc{
+			store.ProbeICMP: pinger.NewProbingPingFunc(mode),
+			store.ProbeDNS:  pinger.NewDNSPingFunc(),
+		},
 		time.Duration(cfg.Ping.IntervalMs)*time.Millisecond,
 		time.Duration(cfg.Ping.TimeoutMs)*time.Millisecond,
 		onSample, &duringSpeedtest, sup, log)

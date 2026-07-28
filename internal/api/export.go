@@ -18,7 +18,7 @@ var exportTables = map[string]struct {
 	"ping_rollup_1h":    {[]string{"target_id", "ts_bucket", "sent", "lost", "rtt_avg_us", "rtt_min_us", "rtt_max_us", "rtt_p95_us", "jitter_us"}, "ts_bucket"},
 	"speedtest_results": {[]string{"id", "engine", "server_name", "server_id", "download_bps", "upload_bps", "latency_ms", "loaded_latency_ms", "packet_loss", "ran_at", "duration_ms", "error"}, "ran_at"},
 	"outage_events":     {[]string{"id", "target_id", "started_at", "ended_at", "duration_ms"}, "started_at"},
-	"targets":           {[]string{"id", "name", "host", "tier", "sort_order", "enabled", "created_at"}, "created_at"},
+	"targets":           {[]string{"id", "name", "host", "tier", "sort_order", "probe", "enabled", "created_at"}, "created_at"},
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {

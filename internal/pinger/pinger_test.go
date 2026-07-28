@@ -15,6 +15,8 @@ import (
 
 func testLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+func icmpOnly(p PingFunc) map[string]PingFunc { return map[string]PingFunc{store.ProbeICMP: p} }
+
 func newTestDetector(t *testing.T, st *store.Store) *outage.Detector {
 	t.Helper()
 	return outage.NewDetector(st, 3, 2, nil, testLogger())
@@ -40,7 +42,7 @@ func TestDriftFreeSchedule(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sup := supervise.New(testLogger())
-	m := NewManager(ping, interval, time.Second, func(store.Sample) {}, nil, sup, testLogger())
+	m := NewManager(icmpOnly(ping), interval, time.Second, func(store.Sample) {}, nil, sup, testLogger())
 	m.Reconcile(ctx, []store.Target{{ID: 1, Name: "t", Host: "x", Enabled: true}})
 
 	time.Sleep(20*interval + interval/2)
@@ -101,7 +103,7 @@ func TestEndToEndOutageDetection(t *testing.T) {
 		writer.Submit(s)
 		detector.Feed(ctx, s)
 	}
-	m := NewManager(ping, 5*time.Millisecond, time.Second, onSample, nil, sup, testLogger())
+	m := NewManager(icmpOnly(ping), 5*time.Millisecond, time.Second, onSample, nil, sup, testLogger())
 
 	sup.Go(ctx, "writer", writer.Run)
 	m.Reconcile(ctx, []store.Target{{ID: id, Name: "sim", Host: "sim", Enabled: true}})
@@ -154,7 +156,7 @@ func TestPerTargetInterval(t *testing.T) {
 		}
 		return time.Millisecond, nil
 	}
-	m := NewManager(ping, 20*time.Millisecond, time.Second, func(store.Sample) {}, nil, sup, testLogger())
+	m := NewManager(icmpOnly(ping), 20*time.Millisecond, time.Second, func(store.Sample) {}, nil, sup, testLogger())
 	m.Reconcile(ctx, []store.Target{
 		{ID: 1, Name: "fast", Host: "fast", Enabled: true},
 		{ID: 2, Name: "slow", Host: "slow", Enabled: true, IntervalMs: 200},
@@ -189,7 +191,7 @@ func TestReconcileStartsAndStops(t *testing.T) {
 	ping := func(ctx context.Context, host string, timeout time.Duration) (time.Duration, error) {
 		return time.Millisecond, nil
 	}
-	m := NewManager(ping, 10*time.Millisecond, time.Second, func(store.Sample) {}, nil, sup, testLogger())
+	m := NewManager(icmpOnly(ping), 10*time.Millisecond, time.Second, func(store.Sample) {}, nil, sup, testLogger())
 
 	targets := []store.Target{
 		{ID: 1, Name: "a", Host: "a", Enabled: true},
