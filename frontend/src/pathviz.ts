@@ -50,8 +50,19 @@ export function renderPathViz(root: HTMLElement, targets: TargetStatus[], speedt
       { class: `path-zone ${health}` },
       h("div", { class: "path-zone-label" }, offline ? `${label} — OFFLINE` : label),
     );
+    // 1-2 targets stack vertically; more split into two balanced rows so a
+    // zone never grows taller than two lines (e.g. 4 anchors render 2x2)
     const tierBox = h("div", { class: "path-tier" });
-    for (const t of g) tierBox.append(node(t, speedtestRunning));
+    if (g.length > 2) {
+      const split = Math.ceil(g.length / 2);
+      for (const rowTargets of [g.slice(0, split), g.slice(split)]) {
+        const row = h("div", { class: "path-tier-row" });
+        for (const t of rowTargets) row.append(node(t, speedtestRunning));
+        tierBox.append(row);
+      }
+    } else {
+      for (const t of g) tierBox.append(node(t, speedtestRunning));
+    }
     box.append(tierBox);
     root.append(box);
   };

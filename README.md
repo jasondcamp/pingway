@@ -68,7 +68,7 @@ upserted; after that the DB is the source of truth — unless you set
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `TARGETS` | *(auto)* | `Name:host[:tier[:probe]],...` e.g. `Router:192.168.1.1:1,CF:1.1.1.1:3,CF DNS:1.1.1.1:3:dns` — probe `icmp` (default) pings; `dns` sends a real recursive query (A example.com, UDP :53) and times the answer |
+| `TARGETS` | *(auto)* | `Name:host[:tier][:probe],...` e.g. `Router:192.168.1.1:1,CF:1.1.1.1:ping,CF DNS:1.1.1.1:dns` — after host, a number 1-3 is the tier (default 3 = internet) and a name is the probe: `ping` (default; alias `icmp`) or `dns`, which sends a real recursive query (A example.com, UDP :53) and times the answer |
 | `LISTEN` | `:8080` | HTTP listen address |
 | `DATA_DIR` | `/data` | SQLite + downloaded tools location |
 | `PING_INTERVAL_MS` | `1000` | Ping cadence |
