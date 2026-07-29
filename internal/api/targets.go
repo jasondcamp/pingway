@@ -42,11 +42,11 @@ func (p *targetPayload) validate() string {
 	if p.IntervalMs != 0 && (p.IntervalMs < 1000 || p.IntervalMs > 60_000) {
 		return "interval_ms must be 0 (default) or between 1000 and 60000"
 	}
-	if p.Probe == "" {
+	if p.Probe == "" || p.Probe == "ping" {
 		p.Probe = store.ProbeICMP
 	}
 	if p.Probe != store.ProbeICMP && p.Probe != store.ProbeDNS {
-		return "probe must be icmp or dns"
+		return "probe must be ping (icmp) or dns"
 	}
 	return ""
 }

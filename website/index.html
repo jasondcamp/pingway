@@ -266,6 +266,7 @@
                         video call experiences: freezes counted in milliseconds, jitter, and
                         a MOS score &mdash; the telecom industry's own quality metric &mdash;
                         saying your line fails. Evidence your ISP can't argue with.
+                        The far end is a <a href="#reflector" class="text-ping-green font-bold underline decoration-2 underline-offset-2 hover:text-ping-teal transition-colors">reflector</a> &mdash; use the free public ones, or host your own in 30 seconds.
                     </p>
                 </div>
                 <div class="bg-[#10151b] rounded-2xl border-[4px] border-ping-offwhite shadow-sticker p-5 font-mono shrink-0 w-64">
@@ -280,6 +281,98 @@
                         the ISP's first hop
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <!-- Reflector Section -->
+        <section id="reflector" class="mb-20 scroll-mt-8">
+            <h2 class="font-rubik font-bold text-3xl text-ping-green mb-8 text-center md:text-left">the reflector &mdash; your own far end</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+
+                <!-- What & why -->
+                <div class="bg-ping-bg border-[4px] border-ping-slate rounded-[2.5rem] p-6 md:p-8 flex flex-col gap-5 group hover:border-ping-offwhite transition-colors duration-300">
+                    <p class="font-mono text-ping-ink/80 text-sm leading-relaxed">
+                        The call probe needs something <span class="font-bold text-ping-ink">outside</span> your
+                        network to bounce off &mdash; reflecting off your own router only proves
+                        your LAN works. The reflector is a tiny, stateless UDP echo: use the
+                        free public fleet, or drop your own on any VPS. Every packet crosses
+                        the exact path that breaks &mdash; your access link, your ISP, the
+                        internet &mdash; and comes straight back.
+                    </p>
+                    <ul class="font-mono text-ping-ink/70 text-sm leading-relaxed flex flex-col gap-3">
+                        <li class="flex gap-3 items-start">
+                            <i class="ph-fill ph-shield-check text-xl text-ping-green shrink-0 mt-0.5"></i>
+                            <span><span class="font-bold text-ping-ink">safe on a public IP</span> &mdash; an HMAC handshake proves each sender's address, so spoofed traffic never earns a single echo toward a third party.</span>
+                        </li>
+                        <li class="flex gap-3 items-start">
+                            <i class="ph-fill ph-arrows-left-right text-xl text-ping-green shrink-0 mt-0.5"></i>
+                            <span><span class="font-bold text-ping-ink">no amplification</span> &mdash; every reply is byte-for-byte the request, never bigger. Rate-limited per source and globally.</span>
+                        </li>
+                        <li class="flex gap-3 items-start">
+                            <i class="ph-fill ph-feather text-xl text-ping-green shrink-0 mt-0.5"></i>
+                            <span><span class="font-bold text-ping-ink">featherweight</span> &mdash; zero per-client state, ~9KB/s each way per monitor. The smallest droplet you can rent is overkill.</span>
+                        </li>
+                        <li class="flex gap-3 items-start">
+                            <i class="ph-fill ph-globe-hemisphere-west text-xl text-ping-green shrink-0 mt-0.5"></i>
+                            <span><span class="font-bold text-ping-ink">use two</span> &mdash; a near and a far reflector separate access-link problems from general internet weather. The public fleet covers both US coasts plus Europe.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Terminal: public fleet or self-host -->
+                <div class="w-full bg-ping-card border-[4px] border-ping-slate rounded-2xl overflow-hidden shadow-sticker relative flex flex-col">
+                    <div class="flex gap-1 px-6 pt-3 border-b-[3px] border-ping-slate/40">
+                        <button id="tab-refl-public" onclick="reflTab('public')" class="font-mono font-bold text-sm px-4 py-2 border-b-[3px] -mb-[3px] transition-colors text-ping-green border-ping-green">use ours &mdash; free</button>
+                        <button id="tab-refl-self" onclick="reflTab('self')" class="font-mono font-bold text-sm px-4 py-2 border-b-[3px] -mb-[3px] transition-colors text-ping-ink/50 border-transparent hover:text-ping-ink">run your own</button>
+                    </div>
+
+                    <!-- Public reflectors -->
+                    <div id="pane-refl-public" class="p-6 pr-16 md:p-8 md:pr-16 font-mono text-sm leading-relaxed text-ping-ink relative flex-1">
+                        <div class="text-ping-ink/60"># zero setup — point pingway at the</div>
+                        <div class="text-ping-ink/60"># public fleet and you're done:</div>
+                        <br>
+                        <div class="break-all"><span class="text-ping-amber font-bold">CALLPROBE_REFLECTORS</span>=<span class="text-ping-teal">NYC3:01.reflector.nyc3.pingway.net,</span></div>
+                        <div class="pl-8 break-all"><span class="text-ping-teal">SFO3:01.reflector.sfo3.pingway.net,</span></div>
+                        <div class="pl-8 break-all"><span class="text-ping-teal">AMS3:01.reflector.ams3.pingway.net</span></div>
+                        <br>
+                        <div class="text-ping-ink/60"># nyc3 &bull; sfo3 &bull; ams3 — keep one near you</div>
+                        <div class="text-ping-ink/60"># plus one far, or run all three.</div>
+                        <div class="text-ping-ink/60"># free &amp; best-effort; rate-limited. no signup.</div>
+                        <button class="absolute bottom-4 right-4 p-2 rounded-lg bg-ping-bg border-2 border-ping-slate text-ping-ink hover:text-ping-green hover:border-ping-green transition-colors" aria-label="Copy command" onclick="copyCmd(this, 'CALLPROBE_REFLECTORS=NYC3:01.reflector.nyc3.pingway.net,SFO3:01.reflector.sfo3.pingway.net,AMS3:01.reflector.ams3.pingway.net')">
+                            <i class="ph ph-copy text-lg"></i>
+                        </button>
+                    </div>
+
+                    <!-- Self-host -->
+                    <div id="pane-refl-self" class="hidden p-6 pr-16 md:p-8 md:pr-16 font-mono text-sm leading-relaxed text-ping-ink relative flex-1">
+                        <div><span class="text-ping-green">$</span> <span class="text-ping-teal font-bold">docker run</span> -d --name pingway-reflector \</div>
+                        <div class="pl-4">-p 15000:15000/udp \</div>
+                        <div class="pl-4">--restart unless-stopped \</div>
+                        <div class="pl-4">ghcr.io/jasondcamp/pingway-reflector:latest</div>
+                        <br>
+                        <div class="text-ping-ink/60"># then tell pingway where it lives:</div>
+                        <div class="break-all"><span class="text-ping-amber font-bold">CALLPROBE_REFLECTORS</span>=<span class="text-ping-teal">VPS-NYC:203.0.113.10</span></div>
+                        <br>
+                        <div class="text-ping-ink/60"># freezes, jitter, and MOS start</div>
+                        <div class="text-ping-ink/60"># charting on the dashboard.</div>
+                        <button class="absolute bottom-4 right-4 p-2 rounded-lg bg-ping-bg border-2 border-ping-slate text-ping-ink hover:text-ping-green hover:border-ping-green transition-colors" aria-label="Copy command" onclick="copyCmd(this, 'docker run -d --name pingway-reflector -p 15000:15000/udp --restart unless-stopped ghcr.io/jasondcamp/pingway-reflector:latest')">
+                            <i class="ph ph-copy text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <script>
+                    function reflTab(which) {
+                        for (const t of ['public', 'self']) {
+                            document.getElementById('pane-refl-' + t).classList.toggle('hidden', t !== which);
+                            const btn = document.getElementById('tab-refl-' + t);
+                            btn.classList.toggle('text-ping-green', t === which);
+                            btn.classList.toggle('border-ping-green', t === which);
+                            btn.classList.toggle('text-ping-ink/50', t !== which);
+                            btn.classList.toggle('border-transparent', t !== which);
+                        }
+                    }
+                </script>
             </div>
         </section>
 

@@ -121,8 +121,11 @@ func TestParseTargetsEnv(t *testing.T) {
 		{"a:b:c:d", 0, true},
 		{"Name:host:9", 0, true},                  // bad tier
 		{":1.1.1.1:1", 0, true},                   // empty name
-		{"CF DNS:1.1.1.1:3:dns", 1, false},        // explicit probe
+		{"CF DNS:1.1.1.1:3:dns", 1, false},        // explicit tier + probe
 		{"CF:1.1.1.1:3:icmp", 1, false},
+		{"CF DNS:1.1.1.1:dns", 1, false},          // probe only, tier defaults to 3
+		{"CF:1.1.1.1:ping", 1, false},             // ping = icmp alias
+		{"CF DNS:1.1.1.1:dns:1", 1, false},        // probe and tier in either order
 		{"CF:1.1.1.1:3:tcp", 0, true},             // unknown probe
 	}
 	for _, c := range cases {
@@ -138,8 +141,16 @@ func TestParseTargetsEnv(t *testing.T) {
 	if got[0].Tier != 3 {
 		t.Fatalf("default tier = %d, want 3", got[0].Tier)
 	}
-	got, _ = ParseTargetsEnv("CF DNS:1.1.1.1:3:dns")
-	if got[0].Probe != "dns" {
-		t.Fatalf("probe = %q, want dns", got[0].Probe)
+	got, _ = ParseTargetsEnv("CF DNS:1.1.1.1:dns")
+	if got[0].Probe != "dns" || got[0].Tier != 3 {
+		t.Fatalf("probe = %q tier = %d, want dns 3", got[0].Probe, got[0].Tier)
+	}
+	got, _ = ParseTargetsEnv("GW DNS:10.0.0.1:dns:1")
+	if got[0].Probe != "dns" || got[0].Tier != 1 {
+		t.Fatalf("probe = %q tier = %d, want dns 1", got[0].Probe, got[0].Tier)
+	}
+	got, _ = ParseTargetsEnv("CF:1.1.1.1:ping")
+	if got[0].Probe != "icmp" {
+		t.Fatalf("probe = %q, want icmp (ping alias)", got[0].Probe)
 	}
 }

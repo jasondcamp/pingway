@@ -250,8 +250,10 @@ func ParseReflectorsEnv(s string) ([]ReflectorSpec, error) {
 	return out, nil
 }
 
-// ParseTargetsEnv parses "Name:host[:tier[:probe]],...".
-// Tier defaults to 3, probe to icmp, when omitted.
+// ParseTargetsEnv parses "Name:host[:tier][:probe],...". The fields after
+// host may appear in either order: a bare number 1-3 is the tier (default
+// 3 = internet), a name is the probe — "ping" (alias "icmp", the default)
+// or "dns". e.g. "Router:192.168.1.1:1,Google:8.8.8.8:ping,Google DNS:8.8.8.8:dns".
 func ParseTargetsEnv(s string) ([]TargetSpec, error) {
 	// docker --env-file does no shell parsing, so a quoted value in .env
 	// arrives with literal quotes around it; strip a matched pair.
@@ -266,25 +268,29 @@ func ParseTargetsEnv(s string) ([]TargetSpec, error) {
 		}
 		fields := strings.Split(part, ":")
 		if len(fields) < 2 || len(fields) > 4 {
-			return nil, fmt.Errorf("TARGETS: bad entry %q (want Name:host[:tier[:probe]])", part)
+			return nil, fmt.Errorf("TARGETS: bad entry %q (want Name:host[:tier][:probe])", part)
 		}
 		t := TargetSpec{Name: strings.TrimSpace(fields[0]), Host: strings.TrimSpace(fields[1]), Tier: 3}
 		if t.Name == "" || t.Host == "" {
 			return nil, fmt.Errorf("TARGETS: bad entry %q (empty name or host)", part)
 		}
-		if len(fields) >= 3 {
-			tier, err := strconv.Atoi(strings.TrimSpace(fields[2]))
-			if err != nil || tier < 1 || tier > 3 {
-				return nil, fmt.Errorf("TARGETS: bad tier in %q (want 1-3)", part)
+		for _, f := range fields[2:] {
+			f = strings.TrimSpace(f)
+			if tier, err := strconv.Atoi(f); err == nil {
+				if tier < 1 || tier > 3 {
+					return nil, fmt.Errorf("TARGETS: bad tier in %q (want 1-3)", part)
+				}
+				t.Tier = tier
+				continue
 			}
-			t.Tier = tier
-		}
-		if len(fields) == 4 {
-			probe := strings.TrimSpace(fields[3])
-			if probe != "icmp" && probe != "dns" {
-				return nil, fmt.Errorf("TARGETS: bad probe in %q (want icmp or dns)", part)
+			switch f {
+			case "ping", "icmp":
+				t.Probe = "icmp"
+			case "dns":
+				t.Probe = "dns"
+			default:
+				return nil, fmt.Errorf("TARGETS: bad field %q in %q (want tier 1-3, ping, or dns)", f, part)
 			}
-			t.Probe = probe
 		}
 		out = append(out, t)
 	}

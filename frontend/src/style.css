@@ -194,6 +194,12 @@ header.topbar {
   flex-shrink: 0;
 }
 
+.path-tier-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
 .path-link {
   flex: 1 0 24px;
   min-width: 24px;

@@ -27,6 +27,28 @@ a freeze lines up against the loss burst at the ISP's first hop in the
 same report. Samples taken during speed tests are flagged and excluded
 from freeze evidence (self-inflicted congestion doesn't count).
 
+## Public reflectors
+
+Pingway runs free public reflectors — no signup, nothing to host:
+
+| Region | Host |
+|---|---|
+| New York (nyc3) | `01.reflector.nyc3.pingway.net` |
+| San Francisco (sfo3) | `01.reflector.sfo3.pingway.net` |
+| Amsterdam (ams3) | `01.reflector.ams3.pingway.net` |
+
+```sh
+CALLPROBE_REFLECTORS=NYC3:01.reflector.nyc3.pingway.net,AMS3:01.reflector.ams3.pingway.net
+```
+
+Pick one near you and one far away — that's the two-reflector setup
+recommended below, and with both US coasts plus Europe covered there's
+a sensible pair from almost anywhere. (Running all three works too.)
+They follow the naming scheme `NN.reflector.<region>.pingway.net`, so
+more may appear over time. They're best-effort: rate-limited per source
+IP, no SLA. For guaranteed capacity — or a far end you fully control —
+run your own:
+
 ## Running a reflector
 
 The reflector is a stateless UDP echo, safe to run publicly:
@@ -98,7 +120,7 @@ is having a day."
 
 ```sh
 # .env — Name:host[:port], comma-separated; port defaults to 15000
-CALLPROBE_REFLECTORS=DO-NYC:203.0.113.10,DO-AMS:198.51.100.7:15000
+CALLPROBE_REFLECTORS=NYC3:01.reflector.nyc3.pingway.net,DO-AMS:198.51.100.7:15000
 CALLPROBE_PPS=50   # optional, default 50
 ```
 
