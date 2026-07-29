@@ -101,6 +101,22 @@ tiers, thresholds, retention).
 - **Tier 3** — internet anchors (1.1.1.1, 8.8.8.8, …). An **internet
   outage** is recorded when *all* tier 3 targets are down simultaneously.
 
+## Gotchas
+
+- **Sub-5ms DNS query times? Your router is answering them.** Many
+  routers and firewalls (Firewalla's DNS Booster, Pi-hole, dnsmasq-based
+  gear) transparently intercept port 53 and answer from a local cache —
+  regardless of which server the query was addressed to. The tells: a
+  `dns` target with an RTT well below the ICMP RTT to the same host (a
+  genuine answer can't arrive faster than the round trip), or DNS
+  targets staying green through an internet outage (cached names still
+  resolve). Confirm with `dig @1.1.1.1 id.server CH TXT +short` — real
+  Cloudflare returns its PoP code (e.g. `EWR`); an empty answer means
+  something in between is impersonating the resolver. Fix: exclude the
+  pingway host from your router's DNS interception/caching feature, or
+  read the target as "LAN DNS service health" rather than resolver
+  reachability.
+
 ## Speed test engines
 
 | Engine | Notes |
