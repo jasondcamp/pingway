@@ -15,7 +15,8 @@ where is the problem?"* at a glance, with history.
   pluggable engines: LibreSpeed (default), Cloudflare, Ookla.
 - **Synthetic call probe** — an RTP-shaped UDP stream to an off-network
   reflector, measuring the thing you actually complain about: call
-  freezes, jitter, and a MOS score in the ISP's own quality units.
+  freezes, jitter, and a MOS score in the ISP's own quality units. Use
+  the free public reflectors or run your own.
   See [docs/call-probe.md](docs/call-probe.md).
 - **Realtime dashboard** over SSE, uPlot history charts, tiered retention
   (raw 48h → 1-minute 30d → 1-hour forever) in a single SQLite file.
@@ -81,7 +82,7 @@ upserted; after that the DB is the source of truth — unless you set
 | `LOG_FORMAT` | *(auto)* | `json` or `text` |
 | `CONFIG_FILE` | `/config/config.yaml` | YAML config path |
 | `LIBRESPEED_SERVER` | *(auto)* | Pin a LibreSpeed backend base URL |
-| `CALLPROBE_REFLECTORS` | *(unset)* | `Name:host[:port],...` — enables the [synthetic call probe](docs/call-probe.md) |
+| `CALLPROBE_REFLECTORS` | *(unset)* | `Name:host[:port],...` — enables the [synthetic call probe](docs/call-probe.md); free public reflectors below |
 | `CALLPROBE_PPS` | `50` | Call-probe packets/sec per reflector (~9KB/s each way) |
 
 ### YAML
@@ -122,14 +123,41 @@ internet-level outage is active.
 
 ICMP proves loss exists; an RTP-shaped UDP stream to an off-network
 reflector proves *calls* fail — freezes counted in milliseconds, jitter,
-and a MOS score in the telecom industry's own quality units. Run
-`ghcr.io/jasondcamp/pingway-reflector` on a cheap VPS, then:
+and a MOS score in the telecom industry's own quality units. The far end
+is a **reflector**: a tiny stateless UDP echo running outside your
+network, so every probe packet crosses the exact path that breaks.
+
+### Public reflectors
+
+Free, no signup, best-effort (rate-limited per source IP):
+
+| Region | Host |
+|---|---|
+| New York (nyc3) | `01.reflector.nyc3.pingway.net` |
+| San Francisco (sfo3) | `01.reflector.sfo3.pingway.net` |
+| Amsterdam (ams3) | `01.reflector.ams3.pingway.net` |
+
+Pick one near you and one far away — near/far separation is what tells
+*"my access link is broken"* apart from *"the internet is having a day"*:
 
 ```sh
-CALLPROBE_REFLECTORS=DO-NYC:your.droplet.ip
+CALLPROBE_REFLECTORS=NYC3:01.reflector.nyc3.pingway.net,AMS3:01.reflector.ams3.pingway.net
 ```
 
-Full guide (reflector deployment, k8s manifest, security model):
+### Run your own
+
+For guaranteed capacity, or a far end you fully control. The reflector
+is safe to run on a public IP: an anti-spoofing HMAC handshake means a
+spoofed source never earns a single echo, replies are byte-for-byte the
+request (no amplification), and it rate-limits per source and globally.
+Bandwidth is ~9KB/s each way per monitor.
+
+```sh
+docker run -d --name pingway-reflector --restart unless-stopped \
+  -p 15000:15000/udp ghcr.io/jasondcamp/pingway-reflector:latest
+```
+
+Full guide (k8s manifest, security model, tuning flags):
 [docs/call-probe.md](docs/call-probe.md).
 
 ## HTTP API
