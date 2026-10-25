@@ -2,7 +2,7 @@
 // Nodes show name + live RTT + status color; links are colored by the
 // health of the downstream group. Shared by dashboard and kiosk.
 
-import type { TargetStatus } from "./api";
+import type { Glance, TargetStatus } from "./api";
 import { h, clear, fmtRTT, healthClass } from "./util";
 
 type Health = "ok" | "warn" | "down";
@@ -76,31 +76,38 @@ export function renderPathViz(root: HTMLElement, targets: TargetStatus[], speedt
   }
 }
 
-// localizeFault returns a one-line diagnosis based on tier health, the
-// "where is the problem" answer.
-export function localizeFault(targets: TargetStatus[], speedtestRunning = false): string | null {
-  const enabled = targets.filter((t) => t.enabled);
-  const health = (n: number): Health | null => {
-    const g = enabled.filter((t) => t.tier === n);
-    return g.length ? worst(g.map((t) => healthClass(t, speedtestRunning))) : null;
-  };
-  const t1 = health(1);
-  const t2 = health(2);
-  const t3 = health(3);
+// localizeFault turns the server's verdict into a sentence.
+//
+// It no longer decides anything. The previous version evaluated tier health
+// here, in the renderer, and only produced a message when the internet tier
+// was unhealthy: its last branches tested `t1 === "down"` and
+// `t2 === "down"`, so a LAN that was merely degraded matched nothing. On a
+// LAN at 95ms with 39% loss, healthClass returned "warn" (down comes from
+// the outage detector, which had not fired), the internet anchors were fine,
+// every branch fell through, and the page said nothing at all. Silence reads
+// as health.
+//
+// The evaluation now happens once, in Go, and this maps the answer to words.
+// The wall panel reads the same verdict from the same endpoint, so the two
+// cannot disagree about whether the network is broken.
+export function localizeFault(g: Glance | null): string | null {
+  if (!g) return null;
+  if (g.stale || g.status === "unknown")
+    return "No probe results recently — the monitor may be restarting.";
+  if (g.status === "ok" || g.worst_hop === null) return null;
 
-  if (t3 === "down") {
-    if (t1 === "down") return "Your LAN is unreachable — check your router and cabling.";
-    if (t2 === "down") return "LAN is healthy but the ISP gateway is down — the problem is your ISP link.";
-    return "LAN and ISP hop look fine but internet anchors are down — upstream ISP or routing problem.";
+  const down = g.status === "down";
+  switch (g.worst_hop) {
+    case "lan":
+      return down
+        ? "Your LAN is unreachable — check local equipment and cabling first."
+        : "Problems start at your LAN — check local equipment first.";
+    case "isp":
+      return "LAN is healthy but the ISP hop is down and the internet is suffering — the problem is your ISP link.";
+    case "internet":
+      return down
+        ? "LAN and ISP hop look fine but the internet is unreachable — upstream ISP or routing problem."
+        : "Local network healthy; loss or latency upstream — likely ISP congestion.";
   }
-  if (t3 === "warn") {
-    if (t1 === "ok" && (t2 === "ok" || t2 === null))
-      return "Local network healthy; packet loss or latency upstream — likely ISP congestion.";
-    if (t1 === "warn" || t1 === "down")
-      return "Problems start at your LAN — check local equipment first.";
-    return "Elevated loss or latency on the path.";
-  }
-  if (t1 === "down") return "A LAN device is down but the internet path is fine.";
-  if (t2 === "down") return "ISP gateway hop not answering pings (path may still be fine).";
   return null;
 }
