@@ -155,6 +155,34 @@ export interface Summary {
   internet_outage_total_ms: number;
 }
 
+// Glance is the shared verdict from GET /api/glance. The evaluation lives
+// in Go (internal/health); this is the only thing that decides whether the
+// network is ok, for the dashboard and for the wall panel alike.
+export interface Glance {
+  status: "ok" | "degraded" | "down" | "unknown";
+  worst_hop: "lan" | "isp" | "internet" | null;
+  lan_ms: number | null;
+  lan_loss_pct: number | null;
+  internet_ms: number | null;
+  loss_pct: number | null;
+  jitter_ms: number | null;
+  window_s: number;
+  updated_at: string;
+  stale: boolean;
+}
+
+export interface HealthThresholds {
+  lan_down_loss_pct: number;
+  lan_degraded_ms: number;
+  lan_degraded_loss_pct: number;
+  internet_down_loss_pct: number;
+  internet_down_ms: number;
+  internet_degraded_loss_pct: number;
+  internet_degraded_ms: number;
+  internet_degraded_jitter_ms: number;
+  stale_after_s: number;
+}
+
 export interface AppSettings {
   speedtest_engine: string;
   speedtest_interval_minutes: number;
@@ -163,6 +191,7 @@ export interface AppSettings {
   retention_raw_hours: number;
   retention_rollup_1m_days: number;
   config_lock: boolean;
+  health_thresholds: HealthThresholds;
 }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -207,6 +236,7 @@ export const api = {
   freezes: (from: number, to: number, minMs = 0) =>
     req<FreezeResponse>(`/api/callprobe/freezes?from=${from}&to=${to}&min_ms=${minMs}`),
   reflectors: () => req<Reflector[]>("/api/reflectors"),
+  glance: () => req<Glance>("/api/glance"),
   settings: () => req<AppSettings>("/api/settings"),
   saveSettings: (s: AppSettings) =>
     req<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),

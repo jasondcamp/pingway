@@ -109,6 +109,7 @@ func NewServer(o Options) *Server {
 	mux.HandleFunc("GET /api/callprobe/history", s.handleCallprobeHistory)
 	mux.HandleFunc("GET /api/callprobe/freezes", s.handleFreezes)
 	mux.HandleFunc("GET /api/reflectors", s.handleReflectors)
+	mux.HandleFunc("GET /api/glance", s.handleGlance)
 	mux.HandleFunc("GET /api/summary", s.handleSummary)
 	mux.HandleFunc("GET /api/export", s.handleExport)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)

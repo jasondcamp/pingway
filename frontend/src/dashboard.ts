@@ -5,6 +5,7 @@ import {
   api,
   Stream,
   type CallprobeSnapshot,
+  type Glance,
   type OutageEvent,
   type Reflector,
   type Sample,
@@ -30,6 +31,9 @@ import {
 
 export function mountDashboard(app: HTMLElement): () => void {
   let status: Status | null = null;
+  // The server's verdict. Fetched rather than derived: the evaluation lives
+  // in internal/health so this page and the wall panel cannot disagree.
+  let glance: Glance | null = null;
   let outageSort: { key: keyof OutageEvent | "duration"; dir: number } = {
     key: "started_at",
     dir: -1,
@@ -135,7 +139,7 @@ export function mountDashboard(app: HTMLElement): () => void {
     if (!status) return;
     renderBanner();
     renderPathViz(pathBox, status.targets, status.speedtest_running);
-    let fault = localizeFault(status.targets, status.speedtest_running);
+    let fault = localizeFault(glance);
     if (!fault && status.speedtest_running) {
       fault = "Speed test in progress — latency reflects a deliberately saturated line.";
     }
@@ -564,8 +568,11 @@ export function mountDashboard(app: HTMLElement): () => void {
 
   async function refreshStatus() {
     try {
-      const next = await api.status();
+      // Both in flight together: the verdict is what the fault line renders
+      // from, so fetching it after would show the previous one for a tick.
+      const [next, verdict] = await Promise.all([api.status(), api.glance()]);
       status = next;
+      glance = verdict;
       const enabled = next.targets.filter((t) => t.enabled);
       spark.setTargets(enabled);
       seedSparkline(enabled);

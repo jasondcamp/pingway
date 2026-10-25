@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"pingway.net/pingway/internal/config"
+	"pingway.net/pingway/internal/health"
 	"pingway.net/pingway/internal/store"
 )
 
@@ -27,6 +28,12 @@ type App struct {
 	RetentionRollup1mDays    int    `json:"retention_rollup_1m_days"`
 	ConfigLock               bool   `json:"config_lock"` // read-only via API
 	UIEdited                 bool   `json:"ui_edited,omitempty"`
+
+	// HealthThresholds decide what counts as degraded or down. Here rather
+	// than as constants so there is one place to tune them, and so the
+	// glance endpoint and the dashboard cannot drift apart by being tuned
+	// separately.
+	HealthThresholds health.Thresholds `json:"health_thresholds"`
 }
 
 // Manager serializes access to the persisted settings.
@@ -51,6 +58,7 @@ func NewManager(ctx context.Context, s *store.Store, cfg *config.Config) (*Manag
 		RetentionRawHours:        cfg.Retention.RawHours,
 		RetentionRollup1mDays:    cfg.Retention.Rollup1mDays,
 		ConfigLock:               cfg.ConfigLock,
+		HealthThresholds:         health.Defaults(),
 	}
 	m := &Manager{store: s, cur: boot, lock: cfg.ConfigLock}
 
@@ -61,6 +69,12 @@ func NewManager(ctx context.Context, s *store.Store, cfg *config.Config) (*Manag
 			var saved App
 			if err := json.Unmarshal([]byte(raw), &saved); err == nil && saved.UIEdited {
 				saved.ConfigLock = false
+				// Settings persisted before thresholds existed unmarshal as
+				// all zeros, and a zero threshold means "0% loss is down".
+				// An upgrade must not turn a healthy network red.
+				if saved.HealthThresholds == (health.Thresholds{}) {
+					saved.HealthThresholds = health.Defaults()
+				}
 				m.cur = saved
 			}
 		}
@@ -118,6 +132,52 @@ func validate(a *App) error {
 	}
 	if a.RetentionRollup1mDays < 1 || a.RetentionRollup1mDays > 3650 {
 		return fmt.Errorf("retention_rollup_1m_days must be between 1 and 3650")
+	}
+	return validateThresholds(&a.HealthThresholds)
+}
+
+// validateThresholds rejects numbers that would make the verdict meaningless
+// rather than merely strict. A zero is the dangerous one: it reads as "this
+// is always exceeded", so a blank form would report a healthy network as
+// down. Unset fields are filled with the defaults instead of refused.
+func validateThresholds(t *health.Thresholds) error {
+	if *t == (health.Thresholds{}) {
+		*t = health.Defaults()
+		return nil
+	}
+	pcts := map[string]float64{
+		"lan_down_loss_pct":          t.LANDownLossPct,
+		"lan_degraded_loss_pct":      t.LANDegradedLossPct,
+		"internet_down_loss_pct":     t.InternetDownLossPct,
+		"internet_degraded_loss_pct": t.InternetDegradedLossPct,
+	}
+	for name, v := range pcts {
+		if v <= 0 || v > 100 {
+			return fmt.Errorf("%s must be between 0 and 100", name)
+		}
+	}
+	ms := map[string]float64{
+		"lan_degraded_ms":             t.LANDegradedMs,
+		"internet_down_ms":            t.InternetDownMs,
+		"internet_degraded_ms":        t.InternetDegradedMs,
+		"internet_degraded_jitter_ms": t.InternetDegradedJitter,
+	}
+	for name, v := range ms {
+		if v <= 0 || v > 60_000 {
+			return fmt.Errorf("%s must be between 0 and 60000", name)
+		}
+	}
+	if t.LANDegradedLossPct >= t.LANDownLossPct {
+		return fmt.Errorf("lan_degraded_loss_pct must be below lan_down_loss_pct")
+	}
+	if t.InternetDegradedLossPct >= t.InternetDownLossPct {
+		return fmt.Errorf("internet_degraded_loss_pct must be below internet_down_loss_pct")
+	}
+	if t.InternetDegradedMs >= t.InternetDownMs {
+		return fmt.Errorf("internet_degraded_ms must be below internet_down_ms")
+	}
+	if t.StaleAfterSeconds < 2 || t.StaleAfterSeconds > 600 {
+		return fmt.Errorf("stale_after_s must be between 2 and 600")
 	}
 	return nil
 }

@@ -231,6 +231,9 @@ GET  /api/outages?from=&to=&target=
 GET  /api/summary?range=24h|7d|30d
                               uptime %, avg/p95 latency per target,
                               speed test min/avg/max, outage count+total duration
+GET  /api/glance              live 60s verdict: status, worst_hop, lan/internet
+                              latency, loss, jitter, stale. In-memory only.
+                              Thresholds from settings; shared with the UI.
 GET  /api/stream              SSE
 GET  /api/export?format=csv&table=...   raw data export (streamed)
 GET  /healthz                 liveness (checks pinger goroutines alive + DB writable)
