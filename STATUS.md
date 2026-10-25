@@ -53,6 +53,17 @@ the `v` convention.
 A release does not deploy. `docker-build.yml` ships on push to `deploy`, and
 main is well ahead of it.
 
+## Install paths
+
+Three, and they are not interchangeable. `install.sh` pulls the published
+image and runs it under Docker with restart-on-boot. `run.sh` builds a local
+image from the checkout and runs that. `install-binary.sh` downloads a
+release tarball, verifies it against `SHA256SUMS` and runs the binary with no
+Docker and no Go, taking its version from the `VERSION` file when run inside
+a checkout and from the latest release otherwise.
+
+Only the Docker paths survive a reboot. The binary path has no unit file.
+
 ## Open threads
 - Next PR: `GET /api/glance` serving the verdict from the in-memory 60s
   window, thresholds persisted in Settings with a UI, and the dashboard
