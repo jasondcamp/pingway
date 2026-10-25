@@ -38,6 +38,21 @@ this alters no behaviour.
   feature diff does not carry a reformat.
 - main is 10 commits ahead of the last deploy (`fb4c469e`, 88 days ago).
 
+## Releases
+
+`VERSION` is the only source of truth. Bump it in a pull request, merge, then
+run the **Release** workflow by hand. It builds the frontend, cross-compiles
+`linux/amd64` and `linux/arm64`, publishes two tarballs with a `SHA256SUMS`,
+pushes a multi-arch image to ghcr, and creates the tag `v$VERSION` with a
+GitHub release.
+
+It refuses if `v$VERSION` or a bare `$VERSION` tag already exists, which
+means it refuses today: VERSION says `0.1.0` and that tag exists from before
+the `v` convention.
+
+A release does not deploy. `docker-build.yml` ships on push to `deploy`, and
+main is well ahead of it.
+
 ## Open threads
 - Next PR: `GET /api/glance` serving the verdict from the in-memory 60s
   window, thresholds persisted in Settings with a UI, and the dashboard
