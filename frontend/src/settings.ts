@@ -1,7 +1,7 @@
 // Settings page: target CRUD, speed test engine/interval, retention knobs,
 // Ookla EULA toggle.
 
-import { api, type AppSettings, type Target } from "./api";
+import { api, type AppSettings, type HealthThresholds, type Target } from "./api";
 import { clear, h } from "./util";
 
 export function mountSettings(app: HTMLElement): () => void {
@@ -195,6 +195,42 @@ export function mountSettings(app: HTMLElement): () => void {
       disabled: s.config_lock,
     }) as HTMLInputElement;
 
+    // Health thresholds. Driven off a table rather than nine hand-written
+    // blocks: these are the numbers that decide whether the dashboard and
+    // the wall panel call the network broken, and they are easier to get
+    // right when they are visibly one list in one order.
+    const thresholdFields: { key: keyof HealthThresholds; label: string; step: string }[] = [
+      { key: "lan_degraded_ms", label: "LAN degraded above (ms)", step: "0.5" },
+      { key: "lan_degraded_loss_pct", label: "LAN degraded above (% loss)", step: "0.5" },
+      { key: "lan_down_loss_pct", label: "LAN down at or above (% loss)", step: "1" },
+      { key: "internet_degraded_ms", label: "Internet degraded above (ms)", step: "5" },
+      { key: "internet_degraded_loss_pct", label: "Internet degraded above (% loss)", step: "0.5" },
+      { key: "internet_degraded_jitter_ms", label: "Internet degraded above (ms jitter)", step: "1" },
+      { key: "internet_down_ms", label: "Internet down at or above (ms)", step: "10" },
+      { key: "internet_down_loss_pct", label: "Internet down at or above (% loss)", step: "1" },
+      { key: "stale_after_s", label: "Treat as unknown after (seconds)", step: "1" },
+    ];
+    const thresholdInputs = new Map<keyof HealthThresholds, HTMLInputElement>();
+    for (const f of thresholdFields) {
+      thresholdInputs.set(
+        f.key,
+        h("input", {
+          type: "number",
+          value: String(s.health_thresholds[f.key]),
+          min: "0",
+          step: f.step,
+          disabled: s.config_lock,
+        }) as HTMLInputElement,
+      );
+    }
+    const readThresholds = (): HealthThresholds => {
+      const out = { ...s.health_thresholds };
+      for (const f of thresholdFields) {
+        out[f.key] = Number(thresholdInputs.get(f.key)!.value);
+      }
+      return out;
+    };
+
     settingsBox.append(
       h("label", { class: "field" }, h("span", { class: "field-name" }, "Speed tests enabled"), stEnabled),
       h("label", { class: "field" }, h("span", { class: "field-name" }, "Engine"), engine),
@@ -222,6 +258,20 @@ export function mountSettings(app: HTMLElement): () => void {
         h("span", { class: "field-name" }, "1-minute rollup retention (days)"),
         rollupDays,
       ),
+      h("div", { class: "field-group-title" }, "Health thresholds"),
+      h(
+        "div",
+        { class: "field-note" },
+        "These decide what the dashboard and the glance API call degraded or down. One set of numbers, both consumers.",
+      ),
+      ...thresholdFields.map((f) =>
+        h(
+          "label",
+          { class: "field" },
+          h("span", { class: "field-name" }, f.label),
+          thresholdInputs.get(f.key)!,
+        ),
+      ),
     );
     if (!s.config_lock) {
       settingsBox.append(
@@ -241,6 +291,7 @@ export function mountSettings(app: HTMLElement): () => void {
                     retention_raw_hours: Number(rawHours.value),
                     retention_rollup_1m_days: Number(rollupDays.value),
                     config_lock: false,
+                    health_thresholds: readThresholds(),
                   });
                   loadSettings();
                 } catch (e) {

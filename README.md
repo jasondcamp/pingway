@@ -189,12 +189,48 @@ GET  /api/callprobe/history?from=&to=      per-second MOS/loss/jitter buckets
 GET  /api/callprobe/freezes?from=&to=&min_ms=   freeze events + totals
 GET  /api/reflectors        configured call-probe reflectors
 GET  /api/summary?range=1h|6h|24h|7d|30d
+GET  /api/glance            one-line verdict from the live 60s window (no DB read)
 GET  /api/stream            SSE: ping (1s batches), status, speedtest, callprobe, freeze
 GET  /api/export?format=csv&table=ping_samples|ping_rollup_1m|ping_rollup_1h|speedtest_results|outage_events|targets
 GET  /healthz               liveness (pinger goroutines + DB writable)
 ```
 
-All timestamps are unix milliseconds UTC.
+All timestamps are unix milliseconds UTC, except `/api/glance`, whose
+`updated_at` is RFC 3339 for the benefit of small display clients.
+
+### /api/glance
+
+A single verdict for a panel or a glance, served entirely from the in-memory
+rolling window. No probe runs on request and no sample table is read, so
+polling it every second costs nothing.
+
+```json
+{
+  "status": "ok",            // ok | degraded | down | unknown
+  "worst_hop": null,         // lan | isp | internet | null
+  "lan_ms": 1.3,             // median RTT to the primary LAN target
+  "lan_loss_pct": 0.0,
+  "internet_ms": 25.4,       // the best internet anchor, not the average
+  "loss_pct": 0.0,           // the lowest loss across anchors
+  "jitter_ms": 2.1,          // on the best anchor
+  "window_s": 60,
+  "updated_at": "2026-10-24T16:50:12-04:00",
+  "stale": false             // no probe cycle completed recently
+}
+```
+
+`internet_ms` and `loss_pct` take the *better* anchor rather than an average:
+one target having a bad minute, or rate-limiting ICMP, should not paint the
+whole internet red, and loss only counts when every path is losing.
+
+Rules are evaluated nearest hop first, so a broken LAN is reported as a
+broken LAN even when everything beyond it is healthy. `stale` wins over
+everything: silence is `unknown`, never `ok`.
+
+Thresholds live in Settings (`health_thresholds`), not in code. The dashboard
+reads this same endpoint for its diagnosis line, so the two cannot disagree
+about whether the network is broken.
+
 
 ## Security
 
