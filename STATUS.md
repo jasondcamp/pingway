@@ -7,8 +7,10 @@ the in-memory 60s window with no database read. `internal/health` is the one
 evaluator behind it, and the dashboard reads the same verdict rather than
 grading path health in its own renderer.
 
-v0.2.0 is published: two tarballs with a `SHA256SUMS`, a multi-arch image on
-ghcr, and the tag `v0.2.0`.
+v0.2.0 is published and contains all of it: two tarballs with a
+`SHA256SUMS`, multi-arch images on ghcr, and the tag `v0.2.0`. Everything on
+main since that tag is workflows, docs and the installer script, so the
+released binary is the current application.
 
 Nothing deploys on merge. Pulling a version tag is the only way code reaches
 a machine.
