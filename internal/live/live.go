@@ -101,6 +101,46 @@ func (t *Tracker) Stats(targetID int64) Stats {
 	return st
 }
 
+// SamplesSince returns a target's samples at or after sinceMs, oldest
+// first, as a copy.
+//
+// A copy because the caller computes medians and jitter over it, which means
+// sorting, and sorting the tracker's own slice under its lock would reorder
+// a window that Add assumes is ordered by timestamp.
+func (t *Tracker) SamplesSince(targetID int64, sinceMs int64) []store.Sample {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	w, ok := t.windows[targetID]
+	if !ok {
+		return nil
+	}
+	i := 0
+	for i < len(w.samples) && w.samples[i].TS < sinceMs {
+		i++
+	}
+	out := make([]store.Sample, len(w.samples)-i)
+	copy(out, w.samples[i:])
+	return out
+}
+
+// LastSampleAt is the timestamp of the most recent sample on any target, or
+// 0 when nothing has been recorded.
+//
+// This is how "has the prober stopped" is answered without the prober having
+// to report liveness separately: samples arriving is the only evidence that
+// matters, and their absence is the only symptom worth showing.
+func (t *Tracker) LastSampleAt() int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var last int64
+	for _, w := range t.windows {
+		if n := len(w.samples); n > 0 && w.samples[n-1].TS > last {
+			last = w.samples[n-1].TS
+		}
+	}
+	return last
+}
+
 // Forget drops the window for a deleted target.
 func (t *Tracker) Forget(targetID int64) {
 	t.mu.Lock()
