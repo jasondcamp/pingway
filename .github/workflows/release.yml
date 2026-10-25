@@ -1,9 +1,14 @@
 # Cut a release: tarballs for amd64 and arm64, a multi-arch image, a tag and
 # a GitHub release, from the version in the VERSION file.
 #
-# Run by hand. There is no automatic bump, because the version is a decision
-# rather than a consequence: VERSION is the single source of truth, you set
-# it in a normal pull request, and this builds whatever it says.
+# Triggered by the version moving, not by merging. `paths: [VERSION]` means
+# a chain of pull requests builds nothing until the last one bumps the file,
+# so the bump is the release decision and it lives in its own pull request.
+# workflow_dispatch stays for re-running after a transient registry failure,
+# which should not need a dummy commit.
+#
+# VERSION is the single source of truth. This builds whatever it says, and
+# refuses if that version has already been tagged.
 #
 # This used to trigger on `tags: ["v*"]` and build only the image. It had
 # never run once: the repository's only tag is `0.1.0`, with no `v`, so the
@@ -15,6 +20,9 @@ name: Release
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['VERSION']
 
 permissions:
   contents: write
@@ -111,6 +119,26 @@ jobs:
             ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The reflector is a second deployable: reflector.sh and the README's
+      # "Run your own" section both pull pingway-reflector:latest. It used to
+      # be built only by docker-build.yml on pushes to `deploy`, so removing
+      # that workflow would have left this image frozen at whatever was last
+      # pushed, with nothing saying so.
+      - name: build and push the reflector image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.reflector
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository }}-reflector:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository }}-reflector:${{ steps.v.outputs.minor }}
+            ghcr.io/${{ github.repository }}-reflector:latest
+          cache-from: type=gha,scope=reflector
+          cache-to: type=gha,scope=reflector,mode=max
 
       # Last, and it creates the tag itself. Everything that can fail has
       # already run, so a tag never exists for a release that did not happen.
