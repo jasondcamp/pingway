@@ -43,6 +43,6 @@ jobs:
           version: latest
       - run: go test ./...
       - name: race detector (pinger/writer/outage/sse)
-        run: go test -race ./internal/pinger/ ./internal/store/ ./internal/outage/ ./internal/sse/ ./internal/speedtest/
+        run: go test -race ./internal/pinger/ ./internal/store/ ./internal/outage/ ./internal/sse/ ./internal/speedtest/ ./internal/callprobe/
       - name: build
         run: CGO_ENABLED=0 go build ./cmd/pingway
