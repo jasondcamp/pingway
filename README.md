@@ -43,6 +43,25 @@ your own targets in **Settings**.
 
 Or with compose: see [`docker-compose.yml`](docker-compose.yml).
 
+### Without Docker
+
+Release binaries are static and need no Go toolchain:
+
+```sh
+# from a checkout: installs the version in the VERSION file
+./install-binary.sh
+
+# without a checkout: installs the latest release
+curl -fsSL https://raw.githubusercontent.com/jasondcamp/pingway/main/install-binary.sh | bash
+```
+
+It verifies the download against the release's `SHA256SUMS` and refuses to
+install on a mismatch. `BIN_DIR` (default `/usr/local/bin`), `DATA_DIR`
+(default `~/pingway/data`), `LISTEN` and `NO_RUN=1` are honoured.
+
+Nothing restarts it on boot: that is what the Docker path gives you for
+free, and the binary path would need a unit file of your own.
+
 ### Networking notes
 
 - `--network host` is recommended: pings originate from the host network
