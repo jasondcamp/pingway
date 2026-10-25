@@ -1,18 +1,93 @@
+# Cut a release: tarballs for amd64 and arm64, a multi-arch image, a tag and
+# a GitHub release, from the version in the VERSION file.
+#
+# Run by hand. There is no automatic bump, because the version is a decision
+# rather than a consequence: VERSION is the single source of truth, you set
+# it in a normal pull request, and this builds whatever it says.
+#
+# This used to trigger on `tags: ["v*"]` and build only the image. It had
+# never run once: the repository's only tag is `0.1.0`, with no `v`, so the
+# pattern never matched. Tag-triggered was also unworkable here, because a
+# tag pushed with GITHUB_TOKEN deliberately does not start another workflow,
+# so a job that creates the tag can never wake a job that waits for one. One
+# workflow that does everything has no such seam.
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
-  image:
+  release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          # Tags are needed to refuse re-releasing a version.
+          fetch-depth: 0
+
+      - name: read and check the version
+        id: v
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "VERSION is '$version', which is not a semantic version" >&2
+            exit 1
+          fi
+          # Both spellings: v0.1.0 is what we tag now, 0.1.0 is what the one
+          # pre-existing tag looks like. Releasing either again would attach
+          # a new tree to a version someone may already be running.
+          for tag in "v$version" "$version"; do
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              echo "tag $tag already exists; bump VERSION in a pull request first" >&2
+              exit 1
+            fi
+          done
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # The binary embeds frontend/dist via go:embed, so this has to happen
+      # before the Go build or the release ships an empty dashboard.
+      - name: build the frontend
+        run: npm ci && npm run build
+        working-directory: frontend
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+
+      # One runner, both architectures: CGO is off, so cross-compiling is a
+      # GOARCH away and needs no emulation.
+      - name: build the binaries
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            out="dist/pingway_${VERSION}_linux_${arch}"
+            mkdir -p "$out"
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build \
+              -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
+              -o "$out/pingway" ./cmd/pingway
+            cp README.md LICENSE config.example.yaml "$out/"
+            tar -czf "${out}.tar.gz" -C dist "pingway_${VERSION}_linux_${arch}"
+            rm -rf "$out"
+          done
+          cd dist && sha256sum *.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -20,22 +95,33 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-      - uses: docker/build-push-action@v6
+
+      # Pushed before the release is created: if the image fails, no tag
+      # exists yet and the version is still free to retry.
+      - name: build and push the image
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          build-args: |
-            VERSION=${{ github.ref_name }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ steps.v.outputs.minor }}
+            ghcr.io/${{ github.repository }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Last, and it creates the tag itself. Everything that can fail has
+      # already run, so a tag never exists for a release that did not happen.
+      - name: tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.v.outputs.tag }}" \
+            --target "$GITHUB_SHA" \
+            --title "${{ steps.v.outputs.tag }}" \
+            --generate-notes \
+            dist/pingway_${{ steps.v.outputs.version }}_linux_amd64.tar.gz \
+            dist/pingway_${{ steps.v.outputs.version }}_linux_arm64.tar.gz \
+            dist/SHA256SUMS
